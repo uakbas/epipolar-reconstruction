@@ -1,5 +1,6 @@
 import cv2 as cv
 import numpy as np
+import torch
 
 
 def generate_points_from(epipolar_line: list, y_limit, x_limit):
@@ -30,3 +31,13 @@ def draw_epipolar_line(image: np.ndarray, epipolar_line, color=(0, 255, 0), thic
     cv.line(image, start_point, end_point, color, thickness)
     cv.imshow('Image with Line', image)
     cv.waitKey(0)
+
+
+def skew_symmetric(t):
+    a1, a2, a3 = t.tolist() if torch.is_tensor(t) else t
+
+    return torch.tensor([
+        [0, -a3, a2],
+        [a3, 0, -a1],
+        [-a2, a1, 0]
+    ], dtype=torch.float32)
