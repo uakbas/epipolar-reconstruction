@@ -1,2 +1,5 @@
 .idea/
 /docs/
+/images/
+/temp.*
+__pycache__/
