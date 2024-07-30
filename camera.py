@@ -1,5 +1,6 @@
 import torch
 import math
+from dataclasses import dataclass
 
 
 def getRotMatX(deg):
@@ -11,23 +12,33 @@ def getRotMatX(deg):
     ], dtype=torch.float32)
 
 
-radius = 420  # Distance to the center of the unit.
-R_1_2 = getRotMatX(270)
-T_1_2 = torch.tensor([0, -radius, radius], dtype=torch.float32)
+@dataclass
+class Sensor:
+    focal_length: float = 8
+    size: tuple = (11.33, 7.13)
+    resolution: tuple = (1280, 800)
 
-cam_dist = 420
-focal_length = 8
-sensor_size = (11.33, 7.13)
-sensor_resolution = (1280, 800)
 
-# TODO DOUBLE CHECK THE WIDTH AND HEIGHT ORDER.
-img_w, img_h = sensor_resolution
-fy = focal_length * img_h / sensor_size[1]
-fx = fy
+class Camera:
+    def __init__(self, R, t, sensor: Sensor = None):
+        self.R = R
+        self.t = t
+        self.sensor = sensor if sensor is not None else Sensor()
+        self.K = self.calibration_matrix(self.sensor)
 
-# TODO DOUBLE CHECK CALIBRATION MATRIX.
-K = torch.tensor([
-    [fx, 0, img_w / 2],
-    [0, fy, img_h / 2],
-    [0, 0, 1]
-], dtype=torch.float32)
+    @staticmethod
+    def calibration_matrix(sensor: Sensor):
+        img_w, img_h = sensor.resolution
+        fy = sensor.focal_length * img_h / sensor.size[1]
+        fx = fy
+        return torch.tensor([
+            [fx, 0, img_w / 2],
+            [0, fy, img_h / 2],
+            [0, 0, 1]
+        ], dtype=torch.float32)
+
+    def transformation_between(self, camera: 'Camera'):
+        # Transformation between 2 cameras.
+        R = self.R.T @ camera.R
+        t = self.R.T @ (camera.t - self.t)
+        return R, t
