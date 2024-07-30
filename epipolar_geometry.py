@@ -41,3 +41,15 @@ def skew_symmetric(t):
         [a3, 0, -a1],
         [-a2, a1, 0]
     ], dtype=torch.float32)
+
+
+def essential_matrix(R, T):
+    # p_1^T @ E @ p_2 = 0 where E is the essential matrix.
+    return skew_symmetric(T) @ R
+
+
+def fundamental_matrix(R, T, K1, K2):
+    # TODO CHECK AGAIN
+    E = essential_matrix(R, T)
+    F = torch.t(torch.inverse(K1)) @ E @ torch.inverse(K2)
+    return F
