@@ -5,6 +5,9 @@ from epipolar_geometry import draw_epipolar_line
 from epipolar_geometry import fundamental_matrix
 from camera import Camera
 from scene import cameras, images
+import numpy as np
+import matplotlib
+from depth.depth_anything_v2.dpt import DepthAnythingV2
 
 
 def fundamental_matrix_between(camera1: Camera, camera2: Camera):
@@ -61,4 +64,27 @@ def test_circle():
     cv.destroyAllWindows()
 
 
-test_circle()
+# test_circle()
+
+def test_depth():
+    DEVICE = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
+
+    model_configs = {'vitl': {'encoder': 'vitl', 'features': 256, 'out_channels': [256, 512, 1024, 1024]}}
+    encoder = 'vitl'
+
+    model = DepthAnythingV2(**model_configs[encoder])
+    model.load_state_dict(torch.load(f'depth/checkpoints/depth_anything_v2_{encoder}.pth', map_location='cpu'))
+    model = model.to(DEVICE).eval()
+
+    depth = model.infer_image(images['front'])
+    # depth = (depth - depth.min()) / (depth.max() - depth.min()) * 255.0
+    # depth = depth.astype(np.uint8)
+    print(np.min(depth), np.max(depth))
+
+    depth = model.infer_image(images['top'])
+    # depth = (depth - depth.min()) / (depth.max() - depth.min()) * 255.0
+    # depth = depth.astype(np.uint8)
+    print(np.min(depth), np.max(depth))
+
+
+test_depth()
