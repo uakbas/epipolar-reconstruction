@@ -29,8 +29,6 @@ def draw_epipolar_line(image: np.ndarray, epipolar_line, color=(0, 255, 0), thic
     print(f'Drawing line between {start_point} and {end_point} on an image with size (H:{H} W:{W})')
 
     cv.line(image, start_point, end_point, color, thickness)
-    cv.imshow('Epipolar Line', image)
-    cv.waitKey(0)
 
 
 def skew_symmetric(t):

@@ -1,18 +1,10 @@
 import cv2 as cv
 import torch
-
+from enum import Enum
 from epipolar_geometry import draw_epipolar_line
 from epipolar_geometry import fundamental_matrix
-from camera import Camera, getRotMatX
-
-radius = 420  # Distance to the center of the unit.
-
-cameras = {
-    'front': Camera(getRotMatX(0), torch.tensor([0, 0, -radius], dtype=torch.float32)),
-    'top': Camera(getRotMatX(270), torch.tensor([0, -radius, 0], dtype=torch.float32)),
-    'back': Camera(getRotMatX(180), torch.tensor([0, 0, radius], dtype=torch.float32)),
-    'bottom': Camera(getRotMatX(90), torch.tensor([0, radius, 0], dtype=torch.float32)),
-}
+from camera import Camera
+from scene import cameras, images
 
 
 def fundamental_matrix_between(camera1: Camera, camera2: Camera):
@@ -20,36 +12,53 @@ def fundamental_matrix_between(camera1: Camera, camera2: Camera):
     return fundamental_matrix(R, t, camera1.K, camera2.K)
 
 
-def test_fundamental_matrix():
-    image_top = cv.imread('images/top.png')
-    image_front = cv.imread('images/front.png')
-    image_back = cv.imread('images/back.png')
-    image_bottom = cv.imread('images/bottom.png')
+class Colors(Enum):
+    BLUE = (255, 0, 0)
+    GREEN = (0, 255, 0)
+    RED = (0, 0, 255)
 
+
+def draw_epipolar_geometry_between(position_1, position_2):
+    img1, img2 = images[position_1], images[position_2]
+    cam1 = cameras[position_1]
+    cam2 = cameras[position_2]
+
+    F = fundamental_matrix_between(cam1, cam2)
+
+    def draw_epipolar_geometry(point, color):
+        line = F.T @ torch.tensor([point[0], point[1], 1], dtype=torch.float32).unsqueeze(1)
+        draw_epipolar_line(img2, line, color)
+        cv.circle(img1, (int(point[0]), int(point[1])), radius=5, color=color, thickness=4)
+        return img1, img2
+
+    return draw_epipolar_geometry
+
+
+def test_circle():
     img_w, img_h = cameras['front'].sensor.resolution
 
-    F_front_top = fundamental_matrix_between(cameras['front'], cameras['top'])
-    # FRONT TO TOP
-    p_front = torch.tensor([img_w / 2 + 300, img_h / 2, 1], dtype=torch.float32).unsqueeze(1)
-    line_top = F_front_top.T @ p_front
-    draw_epipolar_line(image_top, line_top)
+    draw = draw_epipolar_geometry_between('front', 'top')
 
-    # TOP TO FRONT
-    p_top = torch.tensor([img_w / 2 - 300, img_h / 2, 1], dtype=torch.float32).unsqueeze(1)
-    line_front = F_front_top @ p_top
-    draw_epipolar_line(image_front, line_front)
+    # Front Body
+    draw((img_w / 2 + 100, img_h / 2 - 200), Colors.RED.value)
+    draw((img_w / 2 + 100, img_h / 2 - 100), Colors.GREEN.value)
+    draw((img_w / 2 + 100, img_h / 2 + 30), Colors.BLUE.value)
 
-    F_top_back = fundamental_matrix_between(cameras['top'], cameras['back'])
-    # TOP TO BACK
-    p_top = torch.tensor([img_w / 2 + 300, img_h / 2, 1], dtype=torch.float32).unsqueeze(1)
-    line_back = F_top_back.T @ p_top
-    draw_epipolar_line(image_back, line_back)
+    # Fish eye
+    draw((img_w / 2 + 375, img_h / 2 - 75), Colors.RED.value)
 
-    # BOTTOM TO FRONT
-    F_bottom_front = fundamental_matrix_between(cameras['bottom'], cameras['front'])
-    p_bottom = torch.tensor([img_w / 2 - 300, img_h / 2, 1], dtype=torch.float32).unsqueeze(1)
-    line_front = F_bottom_front.T @ p_bottom
-    # draw_epipolar_line(image_front, line_front)
+    # Fin top
+    draw((img_w / 2 - 35, img_h / 2 - 280), Colors.GREEN.value)
+
+    # Tail
+    draw((150, img_h / 2 - 180), Colors.RED.value)
+    draw((150, img_h / 2 - 110), Colors.GREEN.value)
+    img1, img2 = draw((150, img_h / 2 - 60), Colors.BLUE.value)
+
+    cv.imshow('Front', img1)
+    cv.imshow('Top', img2)
+    cv.waitKey(0)
+    cv.destroyAllWindows()
 
 
-test_fundamental_matrix()
+test_circle()
