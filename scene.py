@@ -1,15 +1,15 @@
 import os.path
 import cv2 as cv
 import torch
-from camera import Camera, getRotMatX
+from camera import Camera, get_rot_mat_x
 
 radius = 420  # Distance to the center of the unit.
 
 cameras = {
-    'front': Camera(getRotMatX(0), torch.tensor([0, 0, -radius], dtype=torch.float32)),
-    'top': Camera(getRotMatX(270), torch.tensor([0, -radius, 0], dtype=torch.float32)),
-    'back': Camera(getRotMatX(180), torch.tensor([0, 0, radius], dtype=torch.float32)),
-    'bottom': Camera(getRotMatX(90), torch.tensor([0, radius, 0], dtype=torch.float32)),
+    'front': Camera(get_rot_mat_x(0), torch.tensor([0, 0, -radius], dtype=torch.float32)),
+    'top': Camera(get_rot_mat_x(270), torch.tensor([0, -radius, 0], dtype=torch.float32)),
+    'back': Camera(get_rot_mat_x(180), torch.tensor([0, 0, radius], dtype=torch.float32)),
+    'bottom': Camera(get_rot_mat_x(90), torch.tensor([0, radius, 0], dtype=torch.float32)),
 }
 
 scene_dir = 'scenes/scene_1'

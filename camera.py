@@ -3,7 +3,7 @@ import math
 from dataclasses import dataclass
 
 
-def getRotMatX(deg):
+def get_rot_mat_x(deg):
     rad = deg / 180 * math.pi
     return torch.tensor([
         [1, 0, 0],
@@ -21,7 +21,7 @@ def homogenize(matrix):
 
 
 def homogenize_vec(vector):
-    return torch.cat((vector, torch.tensor([1])), dim=0).unsqueeze(1)
+    return torch.cat((vector, torch.tensor([1])), dim=0)
 
 
 def create_transformation_matrix(R, t):

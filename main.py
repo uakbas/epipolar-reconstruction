@@ -28,7 +28,10 @@ def draw_epipolar_geometry_between(position_1, position_2):
     F = fundamental_matrix_between(cam1, cam2)
 
     def draw_epipolar_geometry(point, color):
-        line = F.T @ torch.tensor([point[0], point[1], 1], dtype=torch.float32).unsqueeze(1)
+        if not torch.is_tensor(point):
+            point = torch.tensor(point, dtype=torch.float32)
+
+        line = F.T @ homogenize_vec(point)
         draw_epipolar_line(img2, line, color)
         cv.circle(img1, (int(point[0]), int(point[1])), radius=5, color=color, thickness=4)
         return img1, img2
@@ -42,20 +45,20 @@ def test_circle():
     draw = draw_epipolar_geometry_between('front', 'top')
 
     # Front Body
-    draw((img_w / 2 + 100, img_h / 2 - 200), Colors.RED.value)
-    draw((img_w / 2 + 100, img_h / 2 - 100), Colors.GREEN.value)
-    draw((img_w / 2 + 100, img_h / 2 + 30), Colors.BLUE.value)
+    draw([img_w / 2 + 100, img_h / 2 - 200], Colors.RED.value)
+    draw([img_w / 2 + 100, img_h / 2 - 100], Colors.GREEN.value)
+    draw([img_w / 2 + 100, img_h / 2 + 30], Colors.BLUE.value)
 
     # Fish eye
-    draw((img_w / 2 + 375, img_h / 2 - 75), Colors.RED.value)
+    draw([img_w / 2 + 375, img_h / 2 - 75], Colors.RED.value)
 
     # Fin top
-    draw((img_w / 2 - 35, img_h / 2 - 280), Colors.GREEN.value)
+    draw([img_w / 2 - 35, img_h / 2 - 280], Colors.GREEN.value)
 
     # Tail
-    draw((150, img_h / 2 - 180), Colors.RED.value)
-    draw((150, img_h / 2 - 110), Colors.GREEN.value)
-    img1, img2 = draw((150, img_h / 2 - 60), Colors.BLUE.value)
+    draw([150, img_h / 2 - 180], Colors.RED.value)
+    draw([150, img_h / 2 - 110], Colors.GREEN.value)
+    img1, img2 = draw([150, img_h / 2 - 60], Colors.BLUE.value)
 
     cv.imshow('Front', img1)
     cv.imshow('Top', img2)
@@ -105,4 +108,4 @@ def test_line_segment():
     print(p_cam_min_top)
 
 
-test_line_segment()
+test_circle()
