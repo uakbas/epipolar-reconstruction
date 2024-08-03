@@ -1,10 +1,11 @@
 import cv2 as cv
+import numpy as np
 import torch
 from enum import Enum
 from epipolar_geometry import draw_epipolar_line
 from epipolar_geometry import fundamental_matrix
-from camera import Camera
-from scene import cameras, images
+from camera import Camera, homogenize_vec, create_transformation_matrix
+from scene import cameras, images, masks, radius
 from depth_prediction import predict_depth, show_depth
 
 
@@ -62,9 +63,46 @@ def test_circle():
     cv.destroyAllWindows()
 
 
-def test_depth():
-    depth = predict_depth(images['front'])
-    show_depth(depth)
+def map_to_absolute_depth(depth, mask):
+    print(f'Max Depth: {np.max(depth)} | Min Depth: {np.min(depth)}')
+    avg_fish_depth = np.ma.average(np.ma.array(depth, mask=~mask.astype(bool)))
+    scale = radius / avg_fish_depth
+    depth_masked = depth * mask
+    depth_scaled = depth_masked * scale
+    return depth_scaled
 
 
-test_depth()
+def test_line_segment():
+    # depth = predict_depth(images['front'])
+    # mask = masks['front']
+    # depth_abs = map_to_absolute_depth(depth, mask)
+    camera_front = cameras['front']
+    img_w, img_h = camera_front.sensor.resolution
+    # p_img = torch.tensor([img_w / 2 + 100, img_h / 2 - 200], dtype=torch.float32)
+    p_img = torch.tensor([img_w / 2, img_h / 2], dtype=torch.float32)
+    p_img = homogenize_vec(p_img)
+    # print(p_img)
+
+    d = 400
+    d_min = d - 50
+    d_max = d + 50
+
+    p_cam = camera_front.K.inverse() @ p_img
+    print(p_cam)
+
+    p_cam_min = d_min * p_cam
+    p_cam_max = d_max * p_cam
+
+    camera_top = cameras['top']
+    R, t = camera_front.transformation_between(camera_top)
+
+    trans = create_transformation_matrix(R, t)
+
+    p_cam_min_top = trans @ homogenize_vec(p_cam_min)
+    p_cam_max_top = trans @ homogenize_vec(p_cam_max)
+
+    # TODO make the translation vectors 2D.
+    print(p_cam_min_top)
+
+
+test_line_segment()
