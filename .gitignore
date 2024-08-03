@@ -1,6 +1,7 @@
 .idea/
 /docs/
 /images/
+/scenes/
 /temp.*
 __pycache__/
 .DS_Store
