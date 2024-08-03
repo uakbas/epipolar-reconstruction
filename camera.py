@@ -12,6 +12,23 @@ def getRotMatX(deg):
     ], dtype=torch.float32)
 
 
+def homogenize(matrix):
+    column_number = matrix.shape[1]
+    last_row = torch.zeros(column_number)
+    last_row[-1] = 1
+    last_row = last_row.unsqueeze(0)
+    return torch.cat((matrix, last_row), 0)
+
+
+def homogenize_vec(vector):
+    return torch.cat((vector, torch.tensor([1])), dim=0).unsqueeze(1)
+
+
+def create_transformation_matrix(R, t):
+    mat = torch.cat((R, -R.T @ t.unsqueeze(1)), dim=1)
+    return homogenize(mat)
+
+
 @dataclass
 class Sensor:
     focal_length: float = 8
