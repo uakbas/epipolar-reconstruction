@@ -25,14 +25,14 @@ def predict_depth(image):
 
 
 def show_depth(depth, grayscale=False):
-    depth = (depth - depth.min()) / (depth.max() - depth.min()) * 255.0
-    depth = depth.astype(np.uint8)
+    depth_ = (depth - depth.min()) / (depth.max() - depth.min()) * 255.0
+    depth_ = depth_.astype(np.uint8)
 
     if grayscale:
-        depth = np.repeat(depth[..., np.newaxis], 3, axis=-1)
+        depth_ = np.repeat(depth_[..., np.newaxis], 3, axis=-1)
     else:
         cmap = matplotlib.colormaps.get_cmap('Spectral_r')
-        depth = (cmap(depth)[:, :, :3] * 255)[:, :, ::-1].astype(np.uint8)
+        depth_ = (cmap(depth_)[:, :, :3] * 255)[:, :, ::-1].astype(np.uint8)
 
-    cv.imshow('depth', depth)
+    cv.imshow('Depth Map', depth_)
     cv.waitKey(0)
