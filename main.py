@@ -75,13 +75,6 @@ def map_to_absolute_depth(depth, mask):
     return depth_scaled
 
 
-def map_img_coord_into_3D(p_img, K, depth):
-    # USE p_img as 2D for now.
-    p_img_hom = homogenize_vec(p_img)
-    p_3d = (torch.inverse(K) @ p_img_hom) * depth
-    return p_3d
-
-
 def test():
     img_front = images['front']
     img_top = images['top']
@@ -89,15 +82,9 @@ def test():
     cam_top = cameras['top']
     img_w, img_h = cameras['front'].sensor.resolution
 
-    # From a point in the front image plane to a point in the cam coordinate system of the front camera.
     point = torch.tensor([img_w / 2, img_h / 2])
-    point_3D = cam_front.map_image_plane_to_3d(point, 420)
-
-    # Project point in the front camera coordinates in to the top image plane.
-    project_mat = cam_front.projection_between(cam_top)
-    point_3D_hom = homogenize_vec(point_3D)
-    point_top = project_mat @ point_3D_hom
-    point_top = point_top / point_top[2]  # Normalize dividing by z.
+    depth = 240
+    point_top = cam_front.map_image_to_image(point, depth, cam_top)
 
     cv.circle(img_top, (int(point_top[0]), int(point_top[1])), radius=5, color=Colors.GREEN.value, thickness=4)
 

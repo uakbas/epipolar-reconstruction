@@ -82,7 +82,7 @@ class Camera:
         R, t = self.transformation_between(camera)
         return create_projection_matrix(R, t, camera.K)
 
-    def map_image_plane_to_3d(self, point, depth):
+    def map_image_to_3d(self, point, depth):
         """
         Maps a point on the image plane to the camera coordinate system by using depth information.
 
@@ -92,3 +92,16 @@ class Camera:
         """
         # K^-1 @ X_image @ d --> X_camera
         return (torch.inverse(self.K) @ homogenize_vec(point)) * depth
+
+    def map_image_to_image(self, point, depth, camera: 'Camera'):
+        """
+        Maps the point on the reference image plane in to the point on the target image plane.
+
+        :param point: The point on the reference image plane
+        :param depth: Depth of the point on the reference image plane
+        :param camera: Target camera
+        :return:
+        """
+        point_3d = self.map_image_to_3d(point, depth)
+        target_point = self.projection_between(camera) @ homogenize_vec(point_3d)
+        return (target_point / target_point[2])[:2]  # Normalize by dividing z value.
