@@ -25,8 +25,13 @@ def homogenize_vec(vector):
 
 
 def create_transformation_matrix(R, t):
-    mat = torch.cat((R, -R.T @ t.unsqueeze(1)), dim=1)
-    return homogenize(mat)
+    return torch.cat((R.T, -R.T @ t.unsqueeze(1)), dim=1)
+
+
+def create_projection_matrix(R, t, K):
+    trans_mat = create_transformation_matrix(R, t)
+    project_mat = K @ trans_mat
+    return project_mat
 
 
 @dataclass

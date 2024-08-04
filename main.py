@@ -4,7 +4,7 @@ import torch
 from enum import Enum
 from epipolar_geometry import draw_epipolar_line
 from epipolar_geometry import fundamental_matrix
-from camera import Camera, homogenize_vec, create_transformation_matrix
+from camera import Camera, homogenize_vec, create_projection_matrix
 from scene import cameras, images, masks, radius
 from depth_prediction import predict_depth, show_depth
 
@@ -75,37 +75,44 @@ def map_to_absolute_depth(depth, mask):
     return depth_scaled
 
 
-def test_line_segment():
-    # depth = predict_depth(images['front'])
-    # mask = masks['front']
-    # depth_abs = map_to_absolute_depth(depth, mask)
-    camera_front = cameras['front']
-    img_w, img_h = camera_front.sensor.resolution
-    # p_img = torch.tensor([img_w / 2 + 100, img_h / 2 - 200], dtype=torch.float32)
-    p_img = torch.tensor([img_w / 2, img_h / 2], dtype=torch.float32)
-    p_img = homogenize_vec(p_img)
-    # print(p_img)
-
-    d = 400
-    d_min = d - 50
-    d_max = d + 50
-
-    p_cam = camera_front.K.inverse() @ p_img
-    print(p_cam)
-
-    p_cam_min = d_min * p_cam
-    p_cam_max = d_max * p_cam
-
-    camera_top = cameras['top']
-    R, t = camera_front.transformation_between(camera_top)
-
-    trans = create_transformation_matrix(R, t)
-
-    p_cam_min_top = trans @ homogenize_vec(p_cam_min)
-    p_cam_max_top = trans @ homogenize_vec(p_cam_max)
-
-    # TODO make the translation vectors 2D.
-    print(p_cam_min_top)
+def map_img_coord_into_3D(p_img, K, depth):
+    # USE p_img as 2D for now.
+    p_img_hom = homogenize_vec(p_img)
+    p_3d = (torch.inverse(K) @ p_img_hom) * depth
+    return p_3d
 
 
-test_circle()
+def test():
+    img_front = images['front']
+    img_top = images['top']
+
+    cam_front = cameras['front']
+    cam_top = cameras['top']
+
+    img_w, img_h = cameras['front'].sensor.resolution
+
+    R, t = cam_front.transformation_between(cam_top)
+
+    p_front = torch.tensor([img_w / 2, img_h / 2])
+    p_depth = 500
+
+    p_3d = map_img_coord_into_3D(p_front, cam_front.K, p_depth)
+    p_3d_hom = homogenize_vec(p_3d)
+
+    # TODO move the function in the Camera class.
+    project_mat = create_projection_matrix(R, t, cam_top.K)
+
+    p_top = project_mat @ p_3d_hom
+    p_top = p_top / p_top[2]  # Normalize dividing by z.
+
+    cv.circle(img_top, (int(p_top[0]), int(p_top[1])), radius=5, color=Colors.GREEN.value, thickness=4)
+    # cv.circle(img_top, (100, 800), radius=5, color=Colors.GREEN.value, thickness=4)
+    print(p_top)
+    print(int(p_top[0]), int(p_top[1]))
+    print(img_top.shape)
+
+    cv.imshow('test', img_top)
+    cv.waitKey()
+
+
+test()
