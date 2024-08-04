@@ -85,31 +85,21 @@ def map_img_coord_into_3D(p_img, K, depth):
 def test():
     img_front = images['front']
     img_top = images['top']
-
     cam_front = cameras['front']
     cam_top = cameras['top']
-
     img_w, img_h = cameras['front'].sensor.resolution
 
-    R, t = cam_front.transformation_between(cam_top)
+    # From a point in the front image plane to a point in the cam coordinate system of the front camera.
+    point = torch.tensor([img_w / 2, img_h / 2])
+    point_3D = cam_front.map_image_plane_to_3d(point, 420)
 
-    p_front = torch.tensor([img_w / 2, img_h / 2])
-    p_depth = 500
+    # Project point in the front camera coordinates in to the top image plane.
+    project_mat = cam_front.projection_between(cam_top)
+    point_3D_hom = homogenize_vec(point_3D)
+    point_top = project_mat @ point_3D_hom
+    point_top = point_top / point_top[2]  # Normalize dividing by z.
 
-    p_3d = map_img_coord_into_3D(p_front, cam_front.K, p_depth)
-    p_3d_hom = homogenize_vec(p_3d)
-
-    # TODO move the function in the Camera class.
-    project_mat = create_projection_matrix(R, t, cam_top.K)
-
-    p_top = project_mat @ p_3d_hom
-    p_top = p_top / p_top[2]  # Normalize dividing by z.
-
-    cv.circle(img_top, (int(p_top[0]), int(p_top[1])), radius=5, color=Colors.GREEN.value, thickness=4)
-    # cv.circle(img_top, (100, 800), radius=5, color=Colors.GREEN.value, thickness=4)
-    print(p_top)
-    print(int(p_top[0]), int(p_top[1]))
-    print(img_top.shape)
+    cv.circle(img_top, (int(point_top[0]), int(point_top[1])), radius=5, color=Colors.GREEN.value, thickness=4)
 
     cv.imshow('test', img_top)
     cv.waitKey()

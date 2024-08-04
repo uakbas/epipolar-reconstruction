@@ -60,7 +60,35 @@ class Camera:
         ], dtype=torch.float32)
 
     def transformation_between(self, camera: 'Camera'):
-        # Transformation between 2 cameras.
+        """
+        The world reference system is associated to the first camera (self).
+        The second camera offset by a rotation R and by a translation t.
+
+        :param camera: Target camera
+        :return:
+        """
         R = self.R.T @ camera.R
         t = self.R.T @ (camera.t - self.t)
         return R, t
+
+    def projection_between(self, camera: 'Camera'):
+        """
+        The world reference system is associated to the first camera (self).
+        The matrix projects the points in reference coordinate system onto the image coordinates of the target camera.
+
+        :param camera: Target camera
+        :return:
+        """
+        R, t = self.transformation_between(camera)
+        return create_projection_matrix(R, t, camera.K)
+
+    def map_image_plane_to_3d(self, point, depth):
+        """
+        Maps a point on the image plane to the camera coordinate system by using depth information.
+
+        :param point: A point on the image plane
+        :param depth: Depth of the point
+        :return: 3D point on the camera coordinate system
+        """
+        # K^-1 @ X_image @ d --> X_camera
+        return (torch.inverse(self.K) @ homogenize_vec(point)) * depth
