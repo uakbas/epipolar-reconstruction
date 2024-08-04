@@ -92,4 +92,38 @@ def test():
     cv.waitKey()
 
 
-test()
+def get_absolute_depths(image, mask):
+    depths = predict_depth(image[:, :, ::-1])  # BGR --> RGB
+    depths = 1 / depths  # invert the depth map
+    avg_fish_depth = np.ma.average(np.ma.array(depths, mask=~mask.astype(bool)))
+    scale = radius / avg_fish_depth  # assuming the fish is at the center of the unit
+    depths = depths * mask * scale
+    depths = depths + (1 - mask) * radius * 2  # Set the surrounding of the fish as the end of unit: radius * 2
+    return depths
+
+
+def test_depth():
+    img_front = images['front']
+    img_top = images['top']
+    img_w, img_h = cameras['front'].sensor_resolution
+
+    depths = get_absolute_depths(images['front'], masks['front'])
+
+    point = torch.tensor([img_w / 2 - 200, img_h / 2])
+    cv.circle(img_front, (int(point[0]), int(point[1])), radius=5, color=Colors.GREEN.value, thickness=4)
+
+    point_depth = depths[int(point[1]), int(point[0])]
+
+    offset = 30
+    point_depth_max = point_depth + offset
+    point_top_max = cameras['front'].map_image_to_image(point, point_depth_max, cameras['top'])
+    point_depth_min = point_depth - offset
+    point_top_min = cameras['front'].map_image_to_image(point, point_depth_min, cameras['top'])
+    cv.line(img_top, (int(point_top_min[0]), int(point_top_min[1])), (int(point_top_max[0]), int(point_top_max[1])), color=Colors.GREEN.value, thickness=4)
+
+    cv.imshow('test a', img_top)
+    cv.imshow('test b', img_front)
+    cv.waitKey()
+
+
+test_depth()

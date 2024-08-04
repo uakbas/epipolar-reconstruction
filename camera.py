@@ -48,6 +48,10 @@ class Camera:
         self.sensor = sensor if sensor is not None else Sensor()
         self.K = self.calibration_matrix(self.sensor)
 
+    @property
+    def sensor_resolution(self):
+        return self.sensor.resolution
+
     @staticmethod
     def calibration_matrix(sensor: Sensor):
         img_w, img_h = sensor.resolution
