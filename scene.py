@@ -33,11 +33,11 @@ masks = {}
 for name in mask_names:
     mask_path = os.path.join(mask_dir, f'{name}.png')
     mask = cv.imread(mask_path, cv.IMREAD_GRAYSCALE)
-    _, mask_binary = cv.threshold(mask, 0, 255, cv.THRESH_BINARY)
-    mask_binary = mask_binary / 255
-
     if mask is None:
         print(f'Could not read mask {mask_path}')
         continue
+
+    _, mask_binary = cv.threshold(mask, 0, 255, cv.THRESH_BINARY)
+    mask_binary = mask_binary / 255
 
     masks[name] = mask_binary
