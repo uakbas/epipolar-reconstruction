@@ -109,3 +109,18 @@ class Camera:
         point_3d = self.map_image_to_3d(point, depth)
         target_point = self.projection_between(camera) @ homogenize_vec(point_3d)
         return (target_point / target_point[2])[:2]  # Normalize by dividing z value.
+
+    def get_depth_from_two_points(self, camera: 'Camera', point1, point2):
+        # TODO handle zero cases
+        # TODO make sure at least one of the dividend elements will be nonzero
+        # TODO prove that the third element of the dividend will be always zero
+        X1 = homogenize_vec(point1)
+        X2 = homogenize_vec(point2)
+        R, t = self.transformation_between(camera)
+        K1, K2 = self.K, camera.K
+
+        quotient = R.T @ t - (R.T @ t)[2] * torch.inverse(K2) @ X2
+        dividend = (R.T @ torch.inverse(K1) @ X1) - (R.T @ torch.inverse(K1) @ X1)[2] * torch.inverse(K2) @ X2
+
+        arg_max_abs = torch.argmax(torch.abs(dividend))
+        return quotient[arg_max_abs] / dividend[arg_max_abs]
