@@ -39,7 +39,7 @@ def draw_epipolar_geometry_between(position_1, position_2):
     return draw_epipolar_geometry
 
 
-def test_circle():
+def test_lines():
     img_w, img_h = cameras['front'].sensor.resolution
 
     draw = draw_epipolar_geometry_between('front', 'top')
@@ -69,7 +69,7 @@ def test_circle():
 def map_to_absolute_depth(depth, mask):
     print(f'Max Depth: {np.max(depth)} | Min Depth: {np.min(depth)}')
     avg_fish_depth = np.ma.average(np.ma.array(depth, mask=~mask.astype(bool)))
-    scale = radius / avg_fish_depth
+    scale = (radius * 0.9) / avg_fish_depth
     depth_masked = depth * mask
     depth_scaled = depth_masked * scale
     return depth_scaled
@@ -92,6 +92,13 @@ def test():
     cv.waitKey()
 
 
+def test_depth():
+    image = images['front']
+    depths = predict_depth(image[:, :, ::-1])  # BGR --> RGB
+
+    show_depth(depths)
+
+
 def get_absolute_depths(image, mask):
     depths = predict_depth(image[:, :, ::-1])  # BGR --> RGB
     depths = 1 / depths  # invert the depth map
@@ -102,28 +109,72 @@ def get_absolute_depths(image, mask):
     return depths
 
 
-def test_depth():
+def test_depth_to_line_segments():
     img_front = images['front']
     img_top = images['top']
     img_w, img_h = cameras['front'].sensor_resolution
 
     depths = get_absolute_depths(images['front'], masks['front'])
 
-    point = torch.tensor([img_w / 2 - 200, img_h / 2])
-    cv.circle(img_front, (int(point[0]), int(point[1])), radius=5, color=Colors.GREEN.value, thickness=4)
+    point = torch.tensor([img_w / 2 + 375, img_h / 2 - 75])  # eye
+    point = torch.tensor([img_w / 2 + 100, img_h / 2])  # head
+    # point = torch.tensor([img_w / 2, img_h / 2])  # middle
+    point = torch.tensor([img_w / 2 - 100, img_h / 2])  # tail
+    cv.circle(img_front, (int(point[0]), int(point[1])), radius=10, color=Colors.RED.value, thickness=10)
 
     point_depth = depths[int(point[1]), int(point[0])]
+    print('Point depth: ', point_depth)
+    # point_depth = 420
 
     offset = 30
     point_depth_max = point_depth + offset
     point_top_max = cameras['front'].map_image_to_image(point, point_depth_max, cameras['top'])
     point_depth_min = point_depth - offset
     point_top_min = cameras['front'].map_image_to_image(point, point_depth_min, cameras['top'])
-    cv.line(img_top, (int(point_top_min[0]), int(point_top_min[1])), (int(point_top_max[0]), int(point_top_max[1])), color=Colors.GREEN.value, thickness=4)
+    cv.line(img_top, (int(point_top_min[0]), int(point_top_min[1])), (int(point_top_max[0]), int(point_top_max[1])),
+            color=Colors.RED.value, thickness=4)
 
     cv.imshow('test a', img_top)
     cv.imshow('test b', img_front)
     cv.waitKey()
 
 
-test_depth()
+def test_image_to_image():
+    img_front, img_top = images['front'], images['top']
+    cam_front, cam_top = cameras['front'], cameras['top']
+    img_w, img_h = cam_front.sensor_resolution
+
+    p1 = torch.tensor([img_w / 2 + 1, img_h / 2])
+    cv.circle(img_front, (int(p1[0]), int(p1[1])), radius=4, color=Colors.RED.value, thickness=4)
+
+    depth = 450
+    p2 = cam_front.map_image_to_image(p1, depth, cam_top)
+    cv.circle(img_top, (int(p2[0]), int(p2[1])), radius=4, color=Colors.RED.value, thickness=4)
+
+    print(f'P1:{p1} | P2:{p2} | img:{(img_w, img_h)} | depth:{depth}')
+
+    '''
+    cv.imshow('front', img_front)
+    cv.imshow('top', img_top)
+    cv.waitKey()
+    '''
+
+
+def test_depth_from_two_points():
+    cam_front, cam_top = cameras['front'], cameras['top']
+    img_w, img_h = cam_front.sensor_resolution
+
+    X1 = torch.tensor([img_w / 2 + 1, img_h / 2])
+    X2 = torch.tensor([641.0714, 335.8847])
+
+    F = fundamental_matrix_between(cam_front, cam_top)
+
+    print('Epipolar Constraint Check: ', homogenize_vec(X1).view(-1, 1).T @ F @ homogenize_vec(X2))
+    print(cam_front.get_depth_from_two_points(cam_top, X1, X2))
+
+
+# test_lines()
+# test_depth()
+# test_depth_to_line_segments()
+test_image_to_image()
+test_depth_from_two_points()
