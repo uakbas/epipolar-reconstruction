@@ -114,13 +114,21 @@ class Camera:
         # TODO handle zero cases
         # TODO make sure at least one of the dividend elements will be nonzero
         # TODO prove that the third element of the dividend will be always zero
+
         X1 = homogenize_vec(point1)
         X2 = homogenize_vec(point2)
         R, t = self.transformation_between(camera)
         K1, K2 = self.K, camera.K
+        e = torch.tensor([0, 0, 1], dtype=torch.float32)  # Only get the third element: e @ R.T @ t = (R.T @ t)[2]
 
-        quotient = R.T @ t - (R.T @ t)[2] * torch.inverse(K2) @ X2
-        dividend = (R.T @ torch.inverse(K1) @ X1) - (R.T @ torch.inverse(K1) @ X1)[2] * torch.inverse(K2) @ X2
-
+        quotient = R.T @ t - (e @ R.T @ t) * torch.inverse(K2) @ X2
+        dividend = (R.T @ torch.inverse(K1) @ X1) - (e @ R.T @ torch.inverse(K1) @ X1) * torch.inverse(K2) @ X2
         arg_max_abs = torch.argmax(torch.abs(dividend))
-        return quotient[arg_max_abs] / dividend[arg_max_abs]
+
+        depth = float('inf')
+        try:
+            depth = quotient[arg_max_abs] / dividend[arg_max_abs]
+        except ZeroDivisionError:
+            print('Finding depth from two points failed: division by zero.')
+
+        return depth
