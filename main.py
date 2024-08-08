@@ -173,8 +173,61 @@ def test_depth_from_two_points():
     print(cam_front.get_depth_from_two_points(cam_top, X1, X2))
 
 
-# test_lines()
-# test_depth()
-# test_depth_to_line_segments()
-test_image_to_image()
-test_depth_from_two_points()
+def test_scaling_relative_depths_by_absolute_depth_of_selected_depths():
+    img_front, img_top = images['front'], images['top']
+    cam_front, cam_top = cameras['front'], cameras['top']
+    img_w, img_h = cameras['front'].sensor_resolution
+
+    def helper_func(p_, d_, color=Colors.RED.value, log=False):
+        cv.circle(img_front, (int(p_[0]), int(p_[1])), radius=10, color=color, thickness=10)
+        p_t = cam_front.map_image_to_image(p_, d_, cam_top)
+        cv.circle(img_top, (int(p_t[0]), int(p_t[1])), radius=5, color=color, thickness=5)
+        if log:
+            print(f'Eye: front: {p_} | top: {p_t} | D: {d_}')
+        return p_, p_t, d_
+
+    # helper_func(torch.tensor([img_w / 2 + 375, img_h / 2 - 75]), 445)  # 1: EYE
+    helper_func(torch.tensor([img_w / 2 + 150, img_h / 2 - 75]), 435, color=Colors.GREEN.value)  # 2: RIGHT BODY
+    helper_func(torch.tensor([img_w / 2 + 50, img_h / 2 - 75]), 430, color=Colors.BLUE.value)  # 3: MIDDLE BODY
+    helper_func(torch.tensor([img_w / 2 - 150, img_h / 2 - 75]), 410)  # 4: LEFT BODY
+    helper_func(torch.tensor([img_w / 2 - 300, img_h / 2 - 75]), 390, color=Colors.GREEN.value)  # 5: TAIL 1
+    helper_func(torch.tensor([img_w / 2 - 450, img_h / 2 - 75]), 365, color=Colors.GREEN.value)  # 6: TAIL 2
+
+    # Selected points
+    points = torch.tensor([
+        # [1015., 325.], # Do not use the eye for now. Its relative depth is inaccurate.
+        [790., 325.],
+        [690., 325.],
+        [490., 325.],
+        [340., 325.],
+        [190., 325.]
+    ], dtype=torch.float32)
+    points = points[:, [1, 0]].int()
+
+    # Relative Depths
+    relative_depth_map = torch.tensor(predict_depth(img_front[:, :, ::-1]), dtype=torch.float32)  # BGR --> RGB
+    relative_depths = relative_depth_map[points[:, 0], points[:, 1]]
+    A = torch.stack((relative_depths, torch.ones(relative_depths.shape))).T
+    print('Relative Depths: ', relative_depths)
+
+    # Absolute depths
+    b = torch.tensor([  # 445, # Do not use the eye for now. Its relative depth is inaccurate.
+        435, 430, 410, 390, 365
+    ], dtype=torch.float32).view(-1, 1)
+    print('Absolute Depths: ', b.squeeze())
+
+    coefficients = torch.inverse((A.T @ A)) @ A.T @ b
+    print('Coefficients: ', coefficients.squeeze())
+
+    # Estimated absolute depths
+    p = A @ coefficients
+    print('Estimated Absolute Depths: ', p.squeeze())
+    print('Difference Between Depths: ', (b - p).squeeze())
+    print('SSE: ', torch.sum(torch.square(b - p)))
+
+    cv.imshow('test a', img_top)
+    cv.imshow('test b', img_front)
+    cv.waitKey()
+
+
+test_scaling_relative_depths_by_absolute_depth_of_selected_depths()
