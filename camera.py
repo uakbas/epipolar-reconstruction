@@ -1,6 +1,7 @@
 import torch
 import math
 from dataclasses import dataclass
+from epipolar_geometry import fundamental_matrix
 
 
 def get_rot_mat_x(deg):
@@ -132,3 +133,7 @@ class Camera:
             print('Finding depth from two points failed: division by zero.')
 
         return depth
+
+    def fundamental_matrix_between(self, camera: 'Camera'):
+        R, t = self.transformation_between(camera)
+        return fundamental_matrix(R, t, self.K, camera.K)
