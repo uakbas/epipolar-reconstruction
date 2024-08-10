@@ -3,5 +3,6 @@
 /images/
 /scenes/
 /temp.*
+/temp/
 __pycache__/
 .DS_Store
