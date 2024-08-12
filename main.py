@@ -104,13 +104,17 @@ def main():
 
 
 def get_border(mask, border_type='middle'):
-    if border_type not in ['middle', 'max']:
-        raise ValueError(f"Invalid value for border: {border_type}. Expected values: 'middle', 'max'")
+    expected_border_types = ['middle', 'max', 'min']
+    if border_type not in expected_border_types:
+        raise ValueError(f"Invalid value for border: {border_type}. Expected types: {expected_border_types}")
 
     mask = torch.as_tensor(mask, dtype=torch.float32)
     H, W = mask.shape
     indexes = torch.arange(0, H).repeat((W, 1)).T
-    indexes_masked = indexes * mask
+
+    # Set H * 2 (which will be the highest value in the indexes_masked) for min to mark the background pixels.
+    background_value = 0 if border_type in ['middle', 'max'] else H * 2 if border_type == 'min' else 0
+    indexes_masked = indexes * mask + (1 - mask) * background_value
 
     border = torch.zeros(W)
     if border_type == 'middle':
@@ -123,9 +127,15 @@ def get_border(mask, border_type='middle'):
         max_index_per_column = torch.max(indexes_masked, dim=0).values
         border = max_index_per_column
 
+    elif border_type == 'min':
+        min_index_per_column = torch.min(indexes_masked, dim=0).values
+        border = min_index_per_column
+
     x = torch.arange(0, border.shape[0], dtype=torch.float32)
     border_points = torch.stack((x, border)).T
-    return border_points[border_points[:, 1] != 0, :]  # Eliminate borders where y=0. They are not real borders.
+
+    # Eliminate borders where y=background_value. Assuming they are not real borders.
+    return border_points[border_points[:, 1] != background_value, :]
 
 
 def draw_points(img, points, **kwargs):
