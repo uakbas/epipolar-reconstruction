@@ -162,8 +162,8 @@ def fit_polynomial(points):
     return torch.tensor(poly_coefficients)
 
 
-def get_intersections(lines, poly_coefficients):
-    # TODO later remove the lines with no real intersection or no first quadrant intersection, instead of assertions.
+def get_intersections(lines, poly_coefficients, image):
+    padding_y, padding_x, _ = torch.as_tensor(image.shape, dtype=torch.float32) / 4
     the_poly = Poly(poly_coefficients)  # The main polynomial for which intersections are sought.
 
     n_lines = lines.shape[0]
@@ -180,8 +180,8 @@ def get_intersections(lines, poly_coefficients):
         # Derive intersection points of a line and the polynomial.
         intersections = torch.stack((new_poly_roots, the_poly(new_poly_roots)), dim=1)
 
-        # Use only the intersections on the first quadrant to make sure it is in the image.
-        intersections = intersections[(intersections[:, 0] >= 0) & (intersections[:, 1] >= 0)]
+        # Use only the intersections on the first quadrant (with paddings) to make sure it is in the image.
+        intersections = intersections[(intersections[:, 0] >= -padding_x) & (intersections[:, 1] >= -padding_y)]
         assert len(intersections) > 0, f'No intersection in first quadrant for idx:{i}'
 
         # Use the intersection with smallest y value.
@@ -210,7 +210,7 @@ def test():
     F = cam_front.fundamental_matrix_between(cam_top)
 
     lines_top = (F.T @ homogenize(border_points_front.T)).T
-    intersections_top = get_intersections(lines_top, poly_coefficients)
+    intersections_top = get_intersections(lines_top, poly_coefficients, img_top)
     print(intersections_top.shape)
     idx = 500
     selected_point = border_points_front[idx]
