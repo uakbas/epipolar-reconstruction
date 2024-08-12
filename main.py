@@ -52,3 +52,54 @@ def pts3d_to_trimesh(img, pts3d, valid=None):
 
     return vertices, faces, face_colors
 
+
+def main():
+    relative_depth = 1 / torch.as_tensor(predict_depth(images['front']), dtype=torch.float32)
+    # relative_depth = torch.as_tensor(masks['front'], dtype=torch.float32) * 420
+    # relative_depth = relative_depth + (1 - masks['front']) * 840
+    relative_depth = relative_depth.flatten()
+
+    depth = relative_depth
+
+    W, H = cameras['front'].sensor_resolution
+    x = torch.arange(0, W, dtype=torch.float32)
+    y = torch.arange(0, H, dtype=torch.float32)
+    grid_x, grid_y = torch.meshgrid(x, y, indexing='xy')
+
+    grid_x = grid_x.flatten()
+    grid_y = grid_y.flatten()
+    ones = torch.ones_like(grid_x)
+    img_points = torch.stack((grid_x, grid_y, ones))
+
+    cam_points = depth * (torch.inverse(cameras['front'].K) @ img_points)
+    cam_points = cam_points.T
+
+    # Put into a unit sphere.
+    cam_points = cam_points - torch.mean(cam_points, dim=0)
+    cam_points = cam_points / torch.norm(cam_points, dim=1).max()
+
+    point_cloud = PointCloud(cam_points)
+
+    SHOW, EXPORT = False, False
+
+    if SHOW:
+        point_cloud.show()
+
+    if EXPORT:
+        point_cloud.export(file_obj='fish_point_cloud.obj', file_type='obj')
+
+    cam_points = cam_points.view(H, W, 3)
+
+    print(images['front'].shape, cam_points.shape)
+
+    vertices, faces, face_colors = pts3d_to_trimesh(images['front'], pts3d=cam_points, valid=masks['front'])
+    fish = trimesh.Trimesh(vertices=vertices, faces=faces, face_colors=face_colors)
+
+    # dimensions1 = [0.1, 0.1, 0.1]
+    # box = trimesh.creation.box(extents=dimensions1)
+    # scene = trimesh.Scene([fish, box])
+
+    scene = trimesh.Scene([fish])
+    scene.show()
+
+    main()
