@@ -15,9 +15,7 @@ def get_rot_mat_x(deg):
 
 def homogenize(matrix):
     column_number = matrix.shape[1]
-    last_row = torch.zeros(column_number)
-    last_row[-1] = 1
-    last_row = last_row.unsqueeze(0)
+    last_row = torch.ones(column_number).unsqueeze(0)
     return torch.cat((matrix, last_row), 0)
 
 
