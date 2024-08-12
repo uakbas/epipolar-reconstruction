@@ -35,6 +35,7 @@ def create_projection_matrix(R, t, K):
 
 @dataclass
 class Sensor:
+    # TODO Find more accurate camera parameters.
     focal_length: float = 8
     size: tuple = (11.33, 7.13)
     resolution: tuple = (1280, 800)

@@ -1,17 +1,13 @@
 import torch
+import trimesh
 import cv2 as cv
 import numpy as np
-from enum import Enum
 from scene import cameras, images, masks, radius
 from camera import Camera, homogenize_vec
 from epipolar_geometry import draw_epipolar_line
+from visualization_tools import Colors, pts3d_to_trimesh
+from trimesh.points import PointCloud
 from depth_prediction import predict_depth
-
-
-class Colors(Enum):
-    BLUE = (255, 0, 0)
-    GREEN = (0, 255, 0)
-    RED = (0, 0, 255)
 
 
 def draw_epipolar_geometry_between(cam_position_1, cam_position_2):
@@ -209,8 +205,61 @@ def test_transforming_relative_depth():
         SSE:                        tensor(6992.3652)
     '''
 
+
+def test_point_cloud_and_trimesh():
+    """ Test the point cloud and mesh creation using relative depth, image and mask."""
+    relative_depth = 1 / torch.as_tensor(predict_depth(images['front']), dtype=torch.float32)
+    # relative_depth = torch.as_tensor(masks['front'], dtype=torch.float32) * 420
+    # relative_depth = relative_depth + (1 - masks['front']) * 840
+    relative_depth = relative_depth.flatten()
+
+    depth = relative_depth
+
+    W, H = cameras['front'].sensor_resolution
+    x = torch.arange(0, W, dtype=torch.float32)
+    y = torch.arange(0, H, dtype=torch.float32)
+    grid_x, grid_y = torch.meshgrid(x, y, indexing='xy')
+
+    grid_x = grid_x.flatten()
+    grid_y = grid_y.flatten()
+    ones = torch.ones_like(grid_x)
+    img_points = torch.stack((grid_x, grid_y, ones))
+
+    cam_points = depth * (torch.inverse(cameras['front'].K) @ img_points)
+    cam_points = cam_points.T
+
+    # Put into a unit sphere.
+    cam_points = cam_points - torch.mean(cam_points, dim=0)
+    cam_points = cam_points / torch.norm(cam_points, dim=1).max()
+
+    point_cloud = PointCloud(cam_points)
+
+    SHOW, EXPORT = False, False
+
+    if SHOW:
+        point_cloud.show()
+
+    if EXPORT:
+        point_cloud.export(file_obj='fish_point_cloud.obj', file_type='obj')
+
+    cam_points = cam_points.view(H, W, 3)
+
+    print(images['front'].shape, cam_points.shape)
+
+    vertices, faces, face_colors = pts3d_to_trimesh(images['front'], pts3d=cam_points, valid=masks['front'])
+    fish = trimesh.Trimesh(vertices=vertices, faces=faces, face_colors=face_colors)
+
+    # dimensions1 = [0.1, 0.1, 0.1]
+    # box = trimesh.creation.box(extents=dimensions1)
+    # scene = trimesh.Scene([fish, box])
+
+    scene = trimesh.Scene([fish])
+    scene.show()
+
+
 # test_epipolar_lines()
 # test_image_point_to_image_point()
 # test_depth_from_two_points()
 # test_depth_to_line_segments()
 # test_transforming_relative_depth()
+test_point_cloud_and_trimesh()
