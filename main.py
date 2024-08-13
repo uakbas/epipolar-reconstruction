@@ -1,87 +1,11 @@
 import torch
 import trimesh
 from scene import cameras, masks, images
-from visualization_tools import Colors, draw_points, draw_polynomial, pts3d_to_trimesh
+from visualization_tools import draw_points, draw_polynomial, pts3d_to_trimesh
 from numpy.polynomial import Polynomial as Poly
-from numpy.polynomial import polynomial
 from camera import homogenize
 from depth_prediction import predict_depth
-
-
-def fit_polynomial(points):
-    N, TWO = points.shape
-    assert TWO == 2, 'The points shape must be (Nx2) where N is the number of points.'
-
-    poly_coefficients = polynomial.polyfit(points[:, 0], points[:, 1], 3)
-    return torch.tensor(poly_coefficients)
-
-
-def get_border(mask, border_type='middle'):
-    expected_border_types = ['middle', 'max', 'min']
-    if border_type not in expected_border_types:
-        raise ValueError(f"Invalid value for border: {border_type}. Expected types: {expected_border_types}")
-
-    mask = torch.as_tensor(mask, dtype=torch.float32)
-    H, W = mask.shape
-    indexes = torch.arange(0, H).repeat((W, 1)).T
-
-    # Set H * 2 (which will be the highest value in the indexes_masked) for min to mark the background pixels.
-    background_value = 0 if border_type in ['middle', 'max'] else H * 2 if border_type == 'min' else 0
-    indexes_masked = indexes * mask + (1 - mask) * background_value
-
-    border = torch.zeros(W)
-    if border_type == 'middle':
-        count_per_column = torch.as_tensor(mask).sum(dim=0) + 0.0001  # 0.0001 avoids division by 0
-        sum_per_colum = indexes_masked.sum(dim=0)
-        mean_index_per_column = sum_per_colum / count_per_column
-        border = mean_index_per_column
-
-    elif border_type == 'max':
-        max_index_per_column = torch.max(indexes_masked, dim=0).values
-        border = max_index_per_column
-
-    elif border_type == 'min':
-        min_index_per_column = torch.min(indexes_masked, dim=0).values
-        border = min_index_per_column
-
-    x = torch.arange(0, border.shape[0], dtype=torch.float32)
-    border_points = torch.stack((x, border)).T
-
-    # Eliminate borders where y=background_value. Assuming they are not real borders.
-    mask_real_border = border_points[:, 1] != background_value
-    idxs_real_border = torch.nonzero(mask_real_border).squeeze()
-    border_points = border_points[mask_real_border, :]
-
-    return border_points, idxs_real_border
-
-
-def get_intersections(lines, poly_coefficients, image):
-    padding_y, padding_x, _ = torch.as_tensor(image.shape, dtype=torch.float32) / 4
-    the_poly = Poly(poly_coefficients)  # The main polynomial for which intersections are sought.
-
-    n_lines = lines.shape[0]
-    zeros = torch.zeros(n_lines)
-    new_coefficients = lines[:, 1:2] * poly_coefficients.repeat(n_lines, 1)
-    new_coefficients = new_coefficients + torch.stack((lines[:, 2], lines[:, 0], zeros, zeros), dim=1)
-
-    result = []
-    for i, coefficient in enumerate(new_coefficients):
-        new_poly = Poly(coefficient)
-        new_poly_roots = torch.tensor([root.real for root in new_poly.roots() if root.imag == 0], dtype=torch.float32)
-        assert len(new_poly_roots) > 0, f'No real root for idx:{i}'
-
-        # Derive intersection points of a line and the polynomial.
-        intersections = torch.stack((new_poly_roots, the_poly(new_poly_roots)), dim=1)
-
-        # Use only the intersections on the first quadrant (with paddings) to make sure it is in the image.
-        intersections = intersections[(intersections[:, 0] >= -padding_x) & (intersections[:, 1] >= -padding_y)]
-        assert len(intersections) > 0, f'No intersection in first quadrant for idx:{i}'
-
-        # Use the intersection with smallest y value.
-        intersections = intersections[torch.argsort(intersections[:, 1])]
-        result.append(intersections[0])
-
-    return torch.stack(result)
+from geometry import get_horizontal_borders, get_poly_intersections_for_lines, fit_polynomial
 
 
 def main():
@@ -91,17 +15,17 @@ def main():
     mask_front, mask_top = masks['front'], masks['top']
 
     # TOP BORDER - MAX
-    border_points_top, _ = get_border(mask_top, border_type='max')
+    border_points_top, _ = get_horizontal_borders(mask_top, border_type='max')
     draw_points(img_top, border_points_top)
     poly_coefficients = fit_polynomial(border_points_top)
     draw_polynomial(img_top, Poly(poly_coefficients))
 
     # FRONT BORDER - MIDDLE
-    border_points_front, border_idxs_front = get_border(mask_front, border_type='middle')
+    border_points_front, border_idxs_front = get_horizontal_borders(mask_front, border_type='middle')
 
     F = cam_front.fundamental_matrix_between(cam_top)
     lines_top = (F.T @ homogenize(border_points_front.T)).T
-    intersections_top = get_intersections(lines_top, poly_coefficients, img_top)
+    intersections_top = get_poly_intersections_for_lines(lines_top, poly_coefficients, img_top)
 
     points_ref, points_tar = border_points_front, intersections_top
     n_intersection = points_ref.shape[0]
@@ -119,6 +43,7 @@ def main():
     depth_map_rel = 1 / torch.as_tensor(predict_depth(img_front), dtype=torch.float32)
     depths_rel = depth_map_rel[points_ref.to(torch.int32)[:, 1], points_ref.to(torch.int32)[:, 0]]
 
+    # TODO this parameter could be learned.
     scaling_ratio = 0.7
 
     scale_coefficients = (depths_abs / depths_rel) * scaling_ratio
