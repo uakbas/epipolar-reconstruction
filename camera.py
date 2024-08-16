@@ -75,6 +75,21 @@ class Camera:
         t = self.R.T @ (camera.t - self.t)
         return R, t
 
+    def transformation_matrix_to_world(self):
+        # TODO Use only rotation and translation. Do not need to create a hypothetical world camera.
+        # Hypothetical world camera
+        world_camera = Camera(torch.eye(3, dtype=torch.float32), torch.zeros(3, dtype=torch.float32))
+        R, t = self.transformation_between(world_camera)
+        return create_transformation_matrix(R, t)
+
+    def transform_to_world(self, points: torch.Tensor) -> torch.Tensor:
+        N, THREE = points.shape
+        assert THREE == 3, 'Points must have shape of (N,3) where N is the number of points.'
+        points = homogenize(points.T)  # 4xN
+        trans_mat = self.transformation_matrix_to_world()
+        points_world = trans_mat @ points
+        return points_world.T
+
     def projection_between(self, camera: 'Camera'):
         """
         The world reference system is associated to the first camera (self).
