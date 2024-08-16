@@ -12,8 +12,8 @@ def main():
         print('No mesh generated.')
         return None
 
-    scene = trimesh.Scene(meshes)
-    scene.export(file_obj='fish_mesh_great_change.obj', file_type='obj')
+    trimesh_scene = trimesh.Scene(meshes)
+    trimesh_scene.export(file_obj='fish_mesh.obj', file_type='obj')
 
 
 if __name__ == '__main__':

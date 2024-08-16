@@ -157,6 +157,7 @@ class Camera:
         # TODO handle zero cases
         # TODO make sure at least one of the dividend elements will be nonzero
         # TODO prove that the third element of the dividend will be always zero
+        # TODO make it suitable for batch operations. (points_1, points_2) instead of (point1, point2)
 
         X1 = homogenize_vec(point1)
         X2 = homogenize_vec(point2)

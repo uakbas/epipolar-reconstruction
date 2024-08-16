@@ -18,12 +18,14 @@ class Scene:
         self.scene_dir = scene_dir
         self.image_dir = os.path.join(scene_dir, 'images')
         self.mask_dir = os.path.join(scene_dir, 'masks')
+        self.mesh_mask_dir = os.path.join(scene_dir, 'mesh_masks')
 
         self.positions = ['front', 'top', 'back', 'bottom']
 
         self.cameras = self.load_cameras()
         self.images = self.load_images()
         self.masks = self.load_masks()
+        self.mesh_masks = self.load_mesh_masks()
         self.point_clouds: Dict[str, Optional[torch.Tensor]] = {pos: None for pos in self.positions}
 
     @staticmethod
@@ -67,6 +69,22 @@ class Scene:
 
         return masks
 
+    def load_mesh_masks(self):
+        mask_names = self.positions
+        masks = {}
+        for name in mask_names:
+            mask_path = os.path.join(self.mesh_mask_dir, f'{name}.png')
+            mask = cv.imread(mask_path, cv.IMREAD_GRAYSCALE)
+            if mask is None:
+                masks[name] = None
+            else:
+                _, mask_binary = cv.threshold(mask, 0, 255, cv.THRESH_BINARY)
+                mask_binary = mask_binary / 255
+
+                masks[name] = mask_binary
+
+        return masks
+
     def convert_to_meshes(self):
         meshes: Dict[str, Optional[trimesh.Trimesh]] = {pos: None for pos in self.positions}
         for position, point_cloud in self.point_clouds.items():
@@ -74,7 +92,7 @@ class Scene:
                 continue
 
             img = self.images[position]
-            mask = self.masks[position]
+            mask = self.mesh_masks[position] if self.mesh_masks[position] is not None else self.masks[position]
             vertices, faces, face_colors = points_3d_to_trimesh(img, point_cloud, valid=mask)
             meshes[position] = trimesh.Trimesh(vertices=vertices, faces=faces, face_colors=face_colors)
 
@@ -84,6 +102,8 @@ class Scene:
         Configuration = namedtuple('Configuration', ['position', 'helper', 'scaling_ratio'])
         configurations = [
             Configuration(position='front', helper='top', scaling_ratio=0.7),
+            Configuration(position='back', helper='top', scaling_ratio=0.7),
+            Configuration(position='top', helper='front', scaling_ratio=0.7),
         ]
         for configuration in configurations:
             self.point_clouds[configuration.position] = self.create_point_cloud(*configuration)
