@@ -180,3 +180,19 @@ class Camera:
     def fundamental_matrix_between(self, camera: 'Camera'):
         R, t = self.transformation_between(camera)
         return fundamental_matrix(R, t, self.K, camera.K)
+
+    def map_points_to_epipolar_lines(self, camera: 'Camera', points):
+        """
+        Map points on the reference image plane into to epipolar lines on the target image plane.
+
+        :param camera: The target camera.
+        :param points: The points on the reference image plane.
+        :return: Epipolar lines as (N,3). A line is [a, b, c] --> ax + by + c = 0
+        """
+        N, TWO = points.shape
+        assert TWO == 2, 'Points shape must be (N,2) where N is the number of points'
+
+        F = self.fundamental_matrix_between(camera)
+        lines = (F.T @ homogenize(points.T)).T  # (N,3)
+
+        return lines

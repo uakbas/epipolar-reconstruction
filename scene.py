@@ -6,11 +6,12 @@ import numpy as np
 from numpy.polynomial import Polynomial as Poly
 from typing import Optional, Dict
 from collections import namedtuple
-from camera import homogenize, get_rot_mat_x, Camera
-from visualization_tools import draw_points, draw_polynomial, points_3d_to_trimesh, Colors
+from camera import get_rot_mat_x, Camera
 from depth_prediction import predict_depth
-from geometry import get_horizontal_borders, get_poly_intersections_for_lines, fit_polynomial
-from epipolar_geometry import draw_epipolar_line
+import geometry as geo
+import epipolar_geometry as ege
+import visualization_tools as vt
+from visualization_tools import Colors
 
 
 class Scene:
@@ -93,7 +94,7 @@ class Scene:
 
             img = self.images[position]
             mask = self.mesh_masks[position] if self.mesh_masks[position] is not None else self.masks[position]
-            vertices, faces, face_colors = points_3d_to_trimesh(img, point_cloud, valid=mask)
+            vertices, faces, face_colors = vt.points_3d_to_trimesh(img, point_cloud, valid=mask)
             meshes[position] = trimesh.Trimesh(vertices=vertices, faces=faces, face_colors=face_colors)
 
         return meshes
@@ -120,35 +121,35 @@ class Scene:
 
         raise ValueError(f'Not implemented for the position pair: {(position, position_helper)}')
 
-    def create_point_cloud(self, position, position_helper, scaling_ratio=0.7):
+    def create_point_cloud(self, position, position_helper, scaling_ratio=0.7, visualize=True):
         """
         Create a mesh for position, utilizing position_helper.
 
         :param position: The position for which to create the mesh.
         :param position_helper: The position which helps to create mesh.
         :param scaling_ratio: The ratio of what percentage the relative depth is scaled by absolute depth.
+        :param visualize: Show visualization of the process if True.
         :return: trimesh.Trimesh
         """
-
-        cam, img, mask = self.cameras[position], self.images[position], self.masks[position]
-        cam_helper, img_helper, mask_helper = self.cameras[position_helper], self.images[position_helper], self.masks[
-            position_helper]
+        cam: Camera = self.cameras[position]
+        cam_helper: Camera = self.cameras[position_helper]
+        img, img_helper = self.images[position], self.images[position_helper]
+        mask, mask_helper = self.masks[position], self.masks[position_helper]
         border_type, border_type_helper = self.get_border_types(position, position_helper)
 
-        border_points_helper, _ = get_horizontal_borders(mask_helper, border_type_helper)
+        border_points_helper, _ = geo.get_horizontal_borders(mask_helper, border_type_helper)
+        border_points, border_idxs = geo.get_horizontal_borders(mask, border_type)
+
         # Find coefficients of the polynomial which passes through the border points
-        poly_coefficients_helper = fit_polynomial(border_points_helper)
+        poly_coefficients_helper = geo.fit_polynomial(border_points_helper)
 
-        border_points, border_idxs = get_horizontal_borders(mask, border_type)
-
+        # A line is [a, b, c] ==> 0 = ax + by + c
+        lines = cam.map_points_to_epipolar_lines(cam_helper, border_points)  # Nx3
         # Find intersections between epipolar lines and the polynomial on the helper image.
-        F = cam.fundamental_matrix_between(cam_helper)
-        lines = (F.T @ homogenize(border_points.T)).T  # Nx3 | A line is [a, b, c] ==> 0 = ax + by + c
-        intersections = get_poly_intersections_for_lines(lines, poly_coefficients_helper, img_helper)  # Nx2
+        intersections = geo.get_poly_intersections_for_lines(lines, poly_coefficients_helper, img_helper)  # Nx2
 
-        assert intersections.shape[0] == border_points.shape[
-            0], 'Number of intersections and border points do not match.'
         n_intersection = intersections.shape[0]
+        assert n_intersection == border_points.shape[0], 'Number of intersections and border points do not match.'
 
         depths_abs = torch.zeros(n_intersection)
         for i in range(n_intersection):
@@ -169,19 +170,20 @@ class Scene:
 
         depth_map_abs = depth_map_rel * scale_coefficients_complete + translation_coefficients_complete
 
-        visualize = True
         if visualize:
-            draw_points(img_helper, border_points_helper)
-            draw_polynomial(img_helper, Poly(poly_coefficients_helper))
+            img_, img_helper_ = np.copy(img), np.copy(img_helper)
+            vt.draw_points(img_helper_, border_points_helper)
+            vt.draw_polynomial(img_helper_, Poly(poly_coefficients_helper))
 
             for i in np.arange(0, n_intersection, 100).tolist():
                 print('Depth: ', cam.get_depth_from_two_points(cam_helper, border_points[i], intersections[i]))
-                cv.circle(img, (int(border_points[i][0]), int(border_points[i][1])), 5, Colors.GREEN.value, 5)
-                cv.circle(img_helper, (int(intersections[i][0]), int(intersections[i][1])), 5, Colors.GREEN.value, 5)
-                draw_epipolar_line(img_helper, lines[i])
+                cv.circle(img_, (int(border_points[i][0]), int(border_points[i][1])), 5, Colors.GREEN.value, 5)
+                cv.circle(img_helper_, (int(intersections[i][0]), int(intersections[i][1])), 5, Colors.GREEN.value, 5)
+                ege.draw_epipolar_line(img_helper_, lines[i])
 
-            cv.imshow(position, img)
-            cv.imshow(position_helper, img_helper)
+            cv.destroyAllWindows()
+            cv.imshow(f'Create Point Cloud: {position}', img_)
+            cv.imshow(f'Create Point Cloud: {position_helper}', img_helper_)
             cv.waitKey()
 
         cam_points = cam.create_point_cloud_by_depth_map(depth_map_abs)
