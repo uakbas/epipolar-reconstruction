@@ -2,15 +2,18 @@ import torch
 import trimesh
 import cv2 as cv
 import numpy as np
-from scene import cameras, images, masks, radius
 from camera import Camera, homogenize_vec
 from epipolar_geometry import draw_epipolar_line
-from visualization_tools import Colors, pts3d_to_trimesh
+from visualization_tools import Colors, points_3d_to_trimesh
 from trimesh.points import PointCloud
 from depth_prediction import predict_depth
+from scene import Scene
 
 
 def draw_epipolar_geometry_between(cam_position_1, cam_position_2):
+    scene_ = Scene(scene_dir='scenes/scene_1')
+    cameras, images = scene_.cameras, scene_.images
+
     cam1: Camera = cameras[cam_position_1]
     cam2: Camera = cameras[cam_position_2]
     img1, img2 = images[cam_position_1], images[cam_position_2]
@@ -29,6 +32,9 @@ def draw_epipolar_geometry_between(cam_position_1, cam_position_2):
 
 def test_epipolar_lines():
     """ Test finding epipolar lines given the points on the reference image. """
+    scene_ = Scene(scene_dir='scenes/scene_1')
+    cameras = scene_.cameras
+
     cam = cameras['front']
     img_w, img_h = cam.sensor_resolution
 
@@ -58,6 +64,8 @@ def test_epipolar_lines():
 
 def test_image_point_to_image_point():
     """ Test finding the target image point given the reference image point and its depth value. """
+    scene_ = Scene(scene_dir='scenes/scene_1')
+    cameras, images, masks, radius = scene_.cameras, scene_.images, scene_.masks, 420
 
     img_front, img_top = images['front'], images['top']
     cam_front, cam_top = cameras['front'], cameras['top']
@@ -67,7 +75,11 @@ def test_image_point_to_image_point():
     cv.circle(img_front, (int(p1[0]), int(p1[1])), radius=5, color=Colors.RED.value, thickness=5)
 
     depth = 450
-    p2 = cam_front.map_image_to_image(p1, depth, cam_top)
+    p2 = cam_front.map_image_to_image(p1, depth, cam_top).squeeze()
+    p2_expected = torch.tensor([641.0714, 335.8847])
+    err_message = f'test_image_point_to_image_point failed: Expected:{p2_expected} | Actual: {p2} '
+    assert torch.allclose(p2, p2_expected), err_message
+
     cv.circle(img_top, (int(p2[0]), int(p2[1])), radius=5, color=Colors.RED.value, thickness=5)
 
     print(f'P1:{p1} | P2:{p2} | img:{(img_w, img_h)} | depth:{depth}')
@@ -81,21 +93,31 @@ def test_image_point_to_image_point():
 def test_depth_from_two_points():
     """ Test finding depth from two points which correspond to same point in 3D. """
 
+    scene_ = Scene(scene_dir='scenes/scene_1')
+    cameras = scene_.cameras
+
     cam_front, cam_top = cameras['front'], cameras['top']
     img_w, img_h = cam_front.sensor_resolution
 
     X1 = torch.tensor([img_w / 2 + 1, img_h / 2])
-    X2 = torch.tensor([641.0714, 335.8847])
+    X2 = torch.tensor([641.0714111328, 335.8846740723])
 
     F = cam_front.fundamental_matrix_between(cam_top)
 
-    # The value should be close to zero.
-    print('Epipolar Constraint Check: ', homogenize_vec(X1).view(-1, 1).T @ F @ homogenize_vec(X2))
+    # Check epipolar constraint
+    close_to_zero = homogenize_vec(X1).view(-1, 1).T @ F @ homogenize_vec(X2)
+    zero = torch.tensor([0.0])
+    print(close_to_zero)
+    assert torch.allclose(close_to_zero, zero,
+                          atol=1e-4), f'Assertion Failed: Expected:{close_to_zero} | Actual: {zero}'
     print('Depth between 2 points is: ', cam_front.get_depth_from_two_points(cam_top, X1, X2))
 
 
 def test_depth_to_line_segments():
     """ Test finding an epipolar line segment given a point and an estimated depth value. """
+
+    scene_ = Scene(scene_dir='scenes/scene_1')
+    cameras, images, masks, radius = scene_.cameras, scene_.images, scene_.masks, 420
 
     img_front, img_top = images['front'], images['top']
     img_w, img_h = cameras['front'].sensor_resolution
@@ -119,8 +141,17 @@ def test_depth_to_line_segments():
     point_depth, offset = depths[point_[1], point_[0]], 30
     point_depth_max, point_depth_min = point_depth + offset, point_depth - offset
 
-    point_top_max = cameras['front'].map_image_to_image(point, point_depth_max, cameras['top'])
-    point_top_min = cameras['front'].map_image_to_image(point, point_depth_min, cameras['top'])
+    point_top_max = cameras['front'].map_image_to_image(point, point_depth_max, cameras['top']).squeeze()
+    point_top_min = cameras['front'].map_image_to_image(point, point_depth_min, cameras['top']).squeeze()
+
+    point_top_max_expected = torch.tensor([535.4022, 358.7291])
+    err_message = f'Assertion failed: Expected {point_top_max_expected} | Actual {point_top_max}'
+    assert torch.allclose(point_top_max, point_top_max_expected), err_message
+
+    point_top_min_expected = torch.tensor([549.6879, 486.9599])
+    err_message = f'Assertion failed: Expected {point_top_min_expected} | Actual {point_top_min}'
+    assert torch.allclose(point_top_min, point_top_min_expected), err_message
+
     point_top_max_, point_top_min_ = tuple(map(int, point_top_max)), tuple(map(int, point_top_min))
 
     cv.circle(img_front, point_, radius=10, color=Colors.RED.value, thickness=10)
@@ -135,13 +166,16 @@ def test_depth_to_line_segments():
 def test_transforming_relative_depth():
     """ Test linear transformation of relative depth by using absolute depth values of selected points. """
 
+    scene_ = Scene(scene_dir='scenes/scene_1')
+    cameras, images = scene_.cameras, scene_.images
+
     img_front, img_top = images['front'], images['top']
     cam_front, cam_top = cameras['front'], cameras['top']
     img_w, img_h = cameras['front'].sensor_resolution
 
     def helper_func(p_, d_, color=Colors.RED.value, log=False):
         cv.circle(img_front, (int(p_[0]), int(p_[1])), radius=5, color=color, thickness=5)
-        p_t = cam_front.map_image_to_image(p_, d_, cam_top)
+        p_t = cam_front.map_image_to_image(p_, d_, cam_top).squeeze()
         cv.circle(img_top, (int(p_t[0]), int(p_t[1])), radius=5, color=color, thickness=5)
         if log:
             print(f'front: {p_} | top: {p_t} | D: {d_}')
@@ -208,6 +242,9 @@ def test_transforming_relative_depth():
 
 def test_point_cloud_and_trimesh():
     """ Test the point cloud and mesh creation using relative depth, image and mask."""
+    scene_ = Scene(scene_dir='scenes/scene_1')
+    cameras, images, masks = scene_.cameras, scene_.images, scene_.masks
+
     relative_depth = 1 / torch.as_tensor(predict_depth(images['front']), dtype=torch.float32)
     # relative_depth = torch.as_tensor(masks['front'], dtype=torch.float32) * 420
     # relative_depth = relative_depth + (1 - masks['front']) * 840
@@ -246,7 +283,7 @@ def test_point_cloud_and_trimesh():
 
     print(images['front'].shape, cam_points.shape)
 
-    vertices, faces, face_colors = pts3d_to_trimesh(images['front'], pts3d=cam_points, valid=masks['front'])
+    vertices, faces, face_colors = points_3d_to_trimesh(images['front'], pts3d=cam_points, valid=masks['front'])
     fish = trimesh.Trimesh(vertices=vertices, faces=faces, face_colors=face_colors)
 
     # dimensions1 = [0.1, 0.1, 0.1]
@@ -258,8 +295,8 @@ def test_point_cloud_and_trimesh():
 
 
 # test_epipolar_lines()
-# test_image_point_to_image_point()
+test_image_point_to_image_point()
 # test_depth_from_two_points()
-# test_depth_to_line_segments()
+test_depth_to_line_segments()
 # test_transforming_relative_depth()
-test_point_cloud_and_trimesh()
+# test_point_cloud_and_trimesh()

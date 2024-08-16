@@ -101,29 +101,57 @@ class Camera:
         R, t = self.transformation_between(camera)
         return create_projection_matrix(R, t, camera.K)
 
-    def map_image_to_3d(self, point, depth):
+    def map_image_to_cam(self, points, depths):
         """
-        Maps a point on the image plane to the camera coordinate system by using depth information.
+        Maps points on the image plane to the camera coordinate system by using depth information.
 
-        :param point: A point on the image plane
-        :param depth: Depth of the point
-        :return: 3D point on the camera coordinate system
+        :param points: Points on the image plane
+        :param depths: Depths of the points
+        :return: 3D points on the camera coordinate system
         """
-        # K^-1 @ X_image @ d --> X_camera
-        return (torch.inverse(self.K) @ homogenize_vec(point)) * depth
 
-    def map_image_to_image(self, point, depth, camera: 'Camera'):
+        depths = torch.as_tensor(depths, dtype=torch.float32)
+        points = torch.as_tensor(points, dtype=torch.float32)
+        if points.dim() == 1:
+            points = points.unsqueeze(0)
+
+        N, TWO = points.shape
+        assert TWO == 2, 'Points must have shape of (N,2) where N is the number of points.'
+
+        points = homogenize(points.T)
+
+        cam_points = (torch.inverse(self.K) @ points) * depths
+        cam_points = cam_points.T
+
+        return cam_points
+
+    def map_image_to_image(self, points, depths, camera: 'Camera'):
         """
-        Maps the point on the reference image plane in to the point on the target image plane.
+        Maps points on the reference image plane in to the points on the target image plane.
 
-        :param point: The point on the reference image plane
-        :param depth: Depth of the point on the reference image plane
+        :param points: Points on the reference image plane
+        :param depths: Depths of points on the reference image plane
         :param camera: Target camera
-        :return:
+        :return: 2D points on the target image plane
         """
-        point_3d = self.map_image_to_3d(point, depth)
-        target_point = self.projection_between(camera) @ homogenize_vec(point_3d)
-        return (target_point / target_point[2])[:2]  # Normalize by dividing z value.
+        cam_points = self.map_image_to_cam(points, depths).T
+
+        target_image_points = self.projection_between(camera) @ homogenize(cam_points)
+        target_image_points = (target_image_points / target_image_points[2, :])[:2]  # Normalize by dividing z value.
+        target_image_points = target_image_points.T
+        return target_image_points
+
+    def create_point_cloud_by_depth_map(self, depth_map):
+        depths = depth_map.flatten()
+
+        W, H = self.sensor_resolution
+        x = torch.arange(0, W, dtype=torch.float32)
+        y = torch.arange(0, H, dtype=torch.float32)
+        grid_x, grid_y = torch.meshgrid(x, y, indexing='xy')
+
+        img_points = torch.stack((grid_x.flatten(), grid_y.flatten())).T
+        cam_points = self.map_image_to_cam(img_points, depths)
+        return cam_points
 
     def get_depth_from_two_points(self, camera: 'Camera', point1, point2):
         # TODO handle zero cases

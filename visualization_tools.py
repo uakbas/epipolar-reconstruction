@@ -1,6 +1,8 @@
-from enum import Enum
 import cv2 as cv
 import torch
+import numpy as np
+
+from enum import Enum
 
 
 class Colors(Enum):
@@ -9,13 +11,16 @@ class Colors(Enum):
     RED = (0, 0, 255)
 
 
-def pts3d_to_trimesh(img, pts3d, valid=None):
-    import numpy as np
+def points_3d_to_trimesh(img, points_3d, valid=None):
     H, W, THREE = img.shape
-    assert THREE == 3
-    assert img.shape == pts3d.shape
+    assert THREE == 3, 'The image shape must be (H,W,3) where H is the height and W is the width'
 
-    vertices = pts3d.reshape(-1, 3)
+    N, THREE = points_3d.shape
+    assert THREE == 3, 'The image shape must be (N,3) where N is the number of points'
+
+    assert H * W == N, 'Number of points do not match.'
+
+    vertices = points_3d.reshape(-1, 3)
 
     # make squares: each pixel == 2 triangles
     idx = np.arange(len(vertices)).reshape(H, W)
