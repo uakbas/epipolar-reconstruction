@@ -25,23 +25,23 @@ def get_horizontal_borders(mask, border_type='middle'):
     background_value = 0 if border_type in ['middle', 'max'] else H * 2 if border_type == 'min' else 0
     indexes_masked = indexes * mask + (1 - mask) * background_value
 
-    border = torch.zeros(W)
+    border_y = torch.zeros(W)
     if border_type == 'middle':
         count_per_column = torch.as_tensor(mask).sum(dim=0) + 0.0001  # 0.0001 avoids division by 0
         sum_per_colum = indexes_masked.sum(dim=0)
         mean_index_per_column = sum_per_colum / count_per_column
-        border = mean_index_per_column
+        border_y = mean_index_per_column
 
     elif border_type == 'max':
         max_index_per_column = torch.max(indexes_masked, dim=0).values
-        border = max_index_per_column
+        border_y = max_index_per_column
 
     elif border_type == 'min':
         min_index_per_column = torch.min(indexes_masked, dim=0).values
-        border = min_index_per_column
+        border_y = min_index_per_column
 
-    x = torch.arange(0, border.shape[0], dtype=torch.float32)
-    border_points = torch.stack((x, border)).T
+    border_x = torch.arange(0, border_y.shape[0], dtype=torch.float32)
+    border_points = torch.stack((border_x, border_y)).T
 
     # Eliminate borders where y=background_value. Assuming they are pseudo borders.
     mask_real_border = border_points[:, 1] != background_value
@@ -109,3 +109,36 @@ def get_poly_intersections_for_lines(lines, poly_coefficients, image):
         result.append(intersections[0])
 
     return torch.stack(result)
+
+
+def align_points_by_polynomial(points: torch.Tensor, mask):
+    """
+    Fit a polynomial on the given points. Sample the polynomial points and filter in order to get the polynomial points
+    which are inside the mask.
+    :param points: Points to be fit by a polynomial.
+    :param mask: Binary mask which filters the polynomial points.
+    :return: (Polynomial points, X coordinates of polynomial points)
+    """
+    poly = Poly(fit_polynomial(points))
+
+    # Create polynomial points by sampling the x coordinate with step=1
+    mask = torch.as_tensor(mask)
+    H, W = mask.shape
+    x_coords = torch.arange(0, W, dtype=torch.int)
+    y_coords = torch.as_tensor(poly(x_coords), dtype=torch.int)
+    poly_points = torch.stack((x_coords, y_coords), dim=0).T
+
+    # Use only the polynomial points which are inside the borders of the mask
+    poly_points = poly_points[(poly_points[:, 1] >= 0) & (poly_points[:, 1] <= H - 1)]
+
+    # Binary polynomial mask where only the pixels that the polynomial passes through are set to 1.
+    poly_mask = torch.zeros_like(mask, dtype=torch.int)
+    poly_mask[poly_points[:, 1], poly_points[:, 0]] = 1
+
+    # Filter the polynomial points where the mask is 0
+    poly_mask = poly_mask * mask
+
+    y_coords_valid, x_coords_valid = torch.nonzero(poly_mask, as_tuple=True)
+    poly_points_valid = torch.stack((x_coords_valid, y_coords_valid), dim=0).T
+
+    return poly_points_valid.to(torch.float32), x_coords_valid

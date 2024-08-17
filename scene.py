@@ -130,7 +130,7 @@ class Scene:
 
         raise ValueError(f'Not implemented for the position pair: {(position, position_helper)}')
 
-    def create_point_cloud(self, position, position_helper, scaling_ratio=0.7, visualize=False):
+    def create_point_cloud(self, position, position_helper, scaling_ratio=0.7, visualize=True):
         """
         Create a mesh for position, utilizing position_helper.
 
@@ -147,7 +147,16 @@ class Scene:
         border_type, border_type_helper = self.get_border_types(position, position_helper)
 
         border_points_helper, _ = geo.get_horizontal_borders(mask_helper, border_type_helper)
-        border_points, border_idxs = geo.get_horizontal_borders(mask, border_type)
+
+        border_points, _ = geo.get_horizontal_borders(mask, border_type)
+        border_points_aligned, border_idxs = geo.align_points_by_polynomial(border_points, mask)
+        if visualize:
+            img_ = np.copy(img)
+            vt.draw_points(img_, border_points, color=Colors.RED.value)
+            vt.draw_points(img_, border_points_aligned, color=Colors.GREEN.value)
+            cv.imshow(f'Aligned Border Points | {position}', img_)
+
+        border_points = border_points_aligned  # Rename
 
         # Find coefficients of the polynomial which passes through the border points
         poly_coefficients_helper = geo.fit_polynomial(border_points_helper)
@@ -190,10 +199,10 @@ class Scene:
                 cv.circle(img_helper_, (int(intersections[i][0]), int(intersections[i][1])), 5, Colors.GREEN.value, 5)
                 ege.draw_epipolar_line(img_helper_, lines[i])
 
-            cv.destroyAllWindows()
             cv.imshow(f'Create Point Cloud: {position}', img_)
             cv.imshow(f'Create Point Cloud: {position_helper}', img_helper_)
             cv.waitKey()
+            cv.destroyAllWindows()
 
         cam_points = cam.create_point_cloud_by_depth_map(depth_map_abs)
         return cam.transform_to_world(cam_points)
