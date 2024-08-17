@@ -29,6 +29,10 @@ class Scene:
         self.mesh_masks = self.load_mesh_masks()
         self.point_clouds: Dict[str, Optional[torch.Tensor]] = {pos: None for pos in self.positions}
 
+    @property
+    def available_point_clouds(self):
+        return {pos: cloud for pos, cloud in self.point_clouds.items() if cloud is not None}
+
     @staticmethod
     def load_cameras():
         radius = 420  # Distance to the center of the unit.
@@ -87,17 +91,22 @@ class Scene:
         return masks
 
     def convert_to_meshes(self):
-        meshes: Dict[str, Optional[trimesh.Trimesh]] = {pos: None for pos in self.positions}
-        for position, point_cloud in self.point_clouds.items():
-            if point_cloud is None:
-                continue
-
+        meshes = {}
+        for position, cloud in self.available_point_clouds.items():
             img = self.images[position]
             mask = self.mesh_masks[position] if self.mesh_masks[position] is not None else self.masks[position]
-            vertices, faces, face_colors = vt.points_3d_to_trimesh(img, point_cloud, valid=mask)
+            vertices, faces, face_colors = vt.points_3d_to_trimesh(img, cloud, valid=mask)
             meshes[position] = trimesh.Trimesh(vertices=vertices, faces=faces, face_colors=face_colors)
 
         return meshes
+
+    def masked_point_clouds(self):
+        masked_point_clouds = {}
+        for position, cloud in self.available_point_clouds.items():
+            mask = torch.as_tensor(self.masks[position], dtype=torch.bool).flatten()
+            masked_point_clouds[position] = cloud[mask]
+
+        return masked_point_clouds
 
     def generate_point_clouds(self):
         Configuration = namedtuple('Configuration', ['position', 'helper', 'scaling_ratio'])
@@ -121,7 +130,7 @@ class Scene:
 
         raise ValueError(f'Not implemented for the position pair: {(position, position_helper)}')
 
-    def create_point_cloud(self, position, position_helper, scaling_ratio=0.7, visualize=True):
+    def create_point_cloud(self, position, position_helper, scaling_ratio=0.7, visualize=False):
         """
         Create a mesh for position, utilizing position_helper.
 
