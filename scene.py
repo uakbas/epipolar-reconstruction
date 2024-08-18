@@ -150,6 +150,8 @@ class Scene:
             return 'middle', 'min'
         if position == 'back' and position_helper == 'top':
             return 'middle', 'min'
+        if position == 'bottom' and position_helper == 'back':
+            return 'middle', 'min'
 
         raise ValueError(f'Not implemented for the position pair: {(position, position_helper)}')
 
