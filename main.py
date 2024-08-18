@@ -3,29 +3,32 @@ from scene import Scene
 
 
 def show_meshes():
-    scene = Scene(scene_dir='scenes/scene_1')
+    scene_num = 1
+    scene_dir = f'scenes/scene_{scene_num}'
+    scene = Scene(scene_dir=scene_dir)
     scene.generate_point_clouds()
     meshes = list(scene.convert_to_meshes().values())
 
-    if len(meshes) == 0:
-        print('No mesh generated.')
-        return
+    assert len(meshes) > 0, 'No meshes found'
 
-    ax = trimesh.creation.axis(origin_size=1, axis_length=100)
-    meshes.append(ax)
+    export_file = f'mesh--{scene_dir.replace('/', '_')}--{scene.configurations_str}.obj'
 
     trimesh_scene = trimesh.Scene(meshes)
-    trimesh_scene.export(file_obj='fish_mesh.obj', file_type='obj')
+    trimesh_scene.export(file_obj=export_file, file_type='obj')
 
 
 def show_point_clouds():
-    scene = Scene(scene_dir='scenes/scene_1')
+    scene_num = 1
+    scene_dir = f'scenes/scene_{scene_num}'
+    scene = Scene(scene_dir=scene_dir)
     scene.generate_point_clouds()
     # point_clouds = scene.available_point_clouds()
     point_clouds = scene.masked_point_clouds()
     trimes_point_clouds = [trimesh.PointCloud(cloud) for cloud in point_clouds.values()]
+
+    export_file = f'cloud--{scene_dir.replace('/', '_')}--{scene.configurations_str}.obj'
     trimesh_scene = trimesh.Scene(trimes_point_clouds)
-    trimesh_scene.export(file_obj='fish_cloud_masked.obj', file_type='obj')
+    trimesh_scene.export(file_obj=export_file, file_type='obj')
 
 
 def main():

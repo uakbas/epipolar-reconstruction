@@ -4,7 +4,7 @@ import trimesh
 import cv2 as cv
 import numpy as np
 from numpy.polynomial import Polynomial as Poly
-from typing import Optional, Dict
+from typing import Optional, Dict, List, Tuple
 from collections import namedtuple
 from camera import get_rot_mat_x, Camera
 from depth_prediction import predict_depth
@@ -15,6 +15,8 @@ from visualization_tools import Colors
 
 
 class Scene:
+    Configuration = namedtuple('Configuration', ['position', 'helper', 'scaling_ratio'])
+
     def __init__(self, scene_dir):
         self.scene_dir = scene_dir
         self.image_dir = os.path.join(scene_dir, 'images')
@@ -22,6 +24,7 @@ class Scene:
         self.mesh_mask_dir = os.path.join(scene_dir, 'mesh_masks')
 
         self.positions = ['front', 'top', 'back', 'bottom']
+        self._configurations = self.load_default_configurations()
 
         self.cameras = self.load_cameras()
         self.images = self.load_images()
@@ -32,6 +35,32 @@ class Scene:
     @property
     def available_point_clouds(self):
         return {pos: cloud for pos, cloud in self.point_clouds.items() if cloud is not None}
+
+    def load_default_configurations(self) -> List['Scene.Configuration']:
+        return [
+            self.Configuration(position='front', helper='top', scaling_ratio=0.7),
+            self.Configuration(position='back', helper='top', scaling_ratio=0.7),
+            self.Configuration(position='top', helper='front', scaling_ratio=0.7),
+        ]
+
+    @property
+    def configurations(self) -> List['Scene.Configuration']:
+        return self._configurations
+
+    @configurations.setter
+    def configurations(self, val: List[Tuple[str, str, float]]):
+        _configurations = []
+        for configuration in val:
+            position, helper, scaling_ratio = configuration
+            if position not in self.positions or helper not in self.positions:
+                raise ValueError(f'position and helper must be in the positions: {self.positions}')
+            _configurations.append(self.Configuration(position, helper, scaling_ratio))
+
+        self._configurations = _configurations
+
+    @property
+    def configurations_str(self):
+        return '_'.join([f'{conf.position}{str(conf.scaling_ratio).replace('.', '')}' for conf in self.configurations])
 
     @staticmethod
     def load_cameras():
@@ -109,13 +138,7 @@ class Scene:
         return masked_point_clouds
 
     def generate_point_clouds(self):
-        Configuration = namedtuple('Configuration', ['position', 'helper', 'scaling_ratio'])
-        configurations = [
-            Configuration(position='front', helper='top', scaling_ratio=0.7),
-            Configuration(position='back', helper='top', scaling_ratio=0.7),
-            Configuration(position='top', helper='front', scaling_ratio=0.7),
-        ]
-        for configuration in configurations:
+        for configuration in self.configurations:
             self.point_clouds[configuration.position] = self.create_point_cloud(*configuration)
 
     @staticmethod
