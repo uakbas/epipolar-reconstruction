@@ -85,7 +85,7 @@ def get_poly_intersections_for_lines(lines, poly_coefficients, image):
     new_coefficients = new_coefficients + torch.stack((lines[:, 2], lines[:, 0], zeros, zeros), dim=1)
 
     # Use for interval constraints of intersection points.
-    padding_y, padding_x, _ = torch.as_tensor(image.shape, dtype=torch.float32) / 4
+    padding_y, padding_x, _ = torch.as_tensor(image.shape, dtype=torch.float32) / 2
 
     # Finding and eliminating roots. Since a line and a polynomial may have multiple intersections or
     # have intersections with imaginary parts, it is necessary to eliminate intersections and choose one of them.
