@@ -6,3 +6,4 @@
 /temp/
 __pycache__/
 .DS_Store
+/todo.txt
