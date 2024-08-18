@@ -141,4 +141,7 @@ def align_points_by_polynomial(points: torch.Tensor, mask):
     y_coords_valid, x_coords_valid = torch.nonzero(poly_mask, as_tuple=True)
     poly_points_valid = torch.stack((x_coords_valid, y_coords_valid), dim=0).T
 
-    return poly_points_valid.to(torch.float32), x_coords_valid
+    # Sort by x values, asc
+    poly_points_valid = poly_points_valid[torch.argsort(poly_points_valid[:, 0])]
+
+    return poly_points_valid.to(torch.float32), poly_points_valid[:, 0]

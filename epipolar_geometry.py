@@ -26,7 +26,7 @@ def draw_epipolar_line(image: np.ndarray, epipolar_line, color=(0, 255, 0), thic
     H, W, _ = image.shape
     start_point, end_point = generate_points_from(epipolar_line, H, W)
     start_point, end_point = [(int(point[0]), int(point[1])) for point in [start_point, end_point]]
-    print(f'Drawing line between {start_point} and {end_point} on an image with size (H:{H} W:{W})')
+    # print(f'Drawing line between {start_point} and {end_point} on an image with size (H:{H} W:{W})')
 
     cv.line(image, start_point, end_point, color, thickness)
 
