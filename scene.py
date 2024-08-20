@@ -12,7 +12,7 @@ import geometry as geo
 import epipolar_geometry as ege
 import visualization_tools as vt
 from visualization_tools import Colors
-from voxel_voter import get_votes_for_volume
+from volume_utils import get_volume_vote, create_volume
 
 
 class Scene:
@@ -26,6 +26,7 @@ class Scene:
 
         self.positions = ['front', 'top', 'back', 'bottom']
 
+        self.radius = 420
         self.cameras = self.load_cameras()
         self.images = self.load_images()
         self.masks = self.load_masks()
@@ -60,9 +61,8 @@ class Scene:
     def available_point_clouds(self):
         return {pos: cloud for pos, cloud in self.point_clouds.items() if cloud is not None}
 
-    @staticmethod
-    def load_cameras():
-        radius = 420  # Distance to the center of the unit.
+    def load_cameras(self):
+        radius = self.radius  # Distance to the center of the unit.
         return {
             'front': Camera(get_rot_mat_x(0), torch.tensor([0, 0, -radius], dtype=torch.float32)),
             'top': Camera(get_rot_mat_x(270), torch.tensor([0, -radius, 0], dtype=torch.float32)),
@@ -247,36 +247,19 @@ class Scene:
 
         return masked_point_clouds
 
-    def generate_voxel_volume_by_voting(self):
-        votes = []
-        points_worlds = []
-        for position in self.positions:
+    def create_point_cloud_by_voxel_voting(self, positions=None, depth_margin=50, min_vote_required=2):
+        volume_limits = [(-self.radius + 1, self.radius - 1) for _ in ['x', 'y', 'z']]
+        volume = create_volume(limits=volume_limits, sampling_step=2)
+        volume_votes = []
+        _positions = positions if positions is not None else self.positions
+        for position in _positions:
+            mask = torch.as_tensor(self.masks[position])
+            cam: Camera = self.cameras[position]
             depth_map = self.depth_maps[position]
-            vote, points_world = self.create_voxel_volume(position, depth_map)
-            votes.append(vote)
-            points_worlds.append(points_world)
+            depth_maps = torch.stack([(depth_map - depth_margin), (depth_map + depth_margin)], dim=-1)
+            volume_vote = get_volume_vote(volume, cam.projection_matrix, mask, depth_maps)
+            volume_votes.append(volume_vote)
 
-        points_world = points_worlds[0]
-        total_votes = torch.sum(torch.stack(votes), dim=0)
-        is_valid_voxel = total_votes > 1
-        valid_voxel_points = points_world[is_valid_voxel]
-        return valid_voxel_points
-
-    def create_voxel_volume(self, position, depth_map, radius=420, depth_margin=50, sampling_frequency=2):
-        volume_left_lim, volume_right_lim = -radius + 1, radius + 1
-        x_line = torch.arange(volume_left_lim, volume_right_lim, sampling_frequency)
-        y_line = torch.arange(volume_left_lim, volume_right_lim, sampling_frequency)
-        z_line = torch.arange(volume_left_lim, volume_right_lim, sampling_frequency)
-        volume = torch.stack(torch.meshgrid([x_line, y_line, z_line], indexing='ij'), dim=-1)
-        x_len, y_len, z_len, THREE = volume.shape
-
-        mask = torch.as_tensor(self.masks[position])
-        cam: Camera = self.cameras[position]
-        P = cam.projection_matrix
-
-        depth_map_max, depth_map_min = (depth_map + depth_margin), (depth_map - depth_margin)
-        depth_maps = torch.stack([depth_map_min, depth_map_max], dim=-1)
-
-        volume_votes = get_votes_for_volume(volume, P, mask, depth_maps)
-
-        return volume_votes.flatten(), volume.view(x_len * y_len * z_len, 3)
+        total_volume_vote = torch.sum(torch.stack(volume_votes), dim=0)
+        is_valid_voxel = total_volume_vote >= min_vote_required
+        return volume[is_valid_voxel]

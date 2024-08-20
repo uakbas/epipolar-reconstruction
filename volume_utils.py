@@ -1,8 +1,17 @@
 import torch
 from camera import homogenize
+from typing import List
 
 
-def get_votes_for_volume(volume, projection_mat, mask, depth_maps):
+def create_volume(limits: List[tuple], sampling_step):
+    x_lim, y_lim, z_lim = limits
+    x_line = torch.arange(*x_lim, sampling_step)
+    y_line = torch.arange(*y_lim, sampling_step)
+    z_line = torch.arange(*z_lim, sampling_step)
+    return torch.stack(torch.meshgrid([x_line, y_line, z_line], indexing='ij'), dim=-1)
+
+
+def get_volume_vote(volume, projection_mat, mask, depth_maps):
     x_len, y_len, z_len, THREE = volume.shape
     assert THREE == 3, "Volume must have shape of (x_len, y_len, z_len, 3)"
 

@@ -35,7 +35,7 @@ def voxel_voting():
     scene_num = 1
     scene_dir = f'scenes/scene_{scene_num}'
     scene = Scene(scene_dir=scene_dir)
-    cloud = scene.generate_voxel_volume_by_voting()
+    cloud = scene.create_point_cloud_by_voxel_voting()
     t_cloud = trimesh.PointCloud(cloud)
     t_cloud.export(file_obj='voxel_voting.obj')
 
