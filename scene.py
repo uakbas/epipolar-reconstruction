@@ -15,52 +15,49 @@ from visualization_tools import Colors
 
 
 class Scene:
-    Configuration = namedtuple('Configuration', ['position', 'helper', 'scaling_ratio'])
+    DepthConfiguration = namedtuple('Configuration', ['position', 'helper', 'scaling_ratio'])
 
-    def __init__(self, scene_dir):
+    def __init__(self, scene_dir, depth_configurations: Optional[List[Tuple[str, str, float]]] = None):
         self.scene_dir = scene_dir
         self.image_dir = os.path.join(scene_dir, 'images')
         self.mask_dir = os.path.join(scene_dir, 'masks')
         self.mesh_mask_dir = os.path.join(scene_dir, 'mesh_masks')
 
         self.positions = ['front', 'top', 'back', 'bottom']
-        self._configurations = self.load_default_configurations()
 
         self.cameras = self.load_cameras()
         self.images = self.load_images()
         self.masks = self.load_masks()
         self.mesh_masks = self.load_mesh_masks()
+
+        if depth_configurations is not None:
+            confs = []
+            for conf in depth_configurations:
+                position, helper, scaling_ratio = conf
+                if position not in self.positions or helper not in self.positions:
+                    raise ValueError(f'position and helper must be in the positions: {self.positions}')
+                confs.append(self.DepthConfiguration(position, helper, scaling_ratio))
+            self.depth_configurations = confs
+        else:
+            self.depth_configurations = [
+                self.DepthConfiguration(position='front', helper='top', scaling_ratio=0.7),
+                self.DepthConfiguration(position='back', helper='top', scaling_ratio=0.7),
+                self.DepthConfiguration(position='top', helper='front', scaling_ratio=0.7),
+                self.DepthConfiguration(position='bottom', helper='back', scaling_ratio=0.7),
+            ]
+        self.depth_maps: Dict[str, Optional[torch.Tensor]] = {pos: None for pos in self.positions}
+        self.generate_depth_maps()
+
         self.point_clouds: Dict[str, Optional[torch.Tensor]] = {pos: None for pos in self.positions}
+
+    @property
+    def configurations_str(self):
+        return '_'.join(
+            [f'{conf.position}{str(conf.scaling_ratio).replace('.', '')}' for conf in self.depth_configurations])
 
     @property
     def available_point_clouds(self):
         return {pos: cloud for pos, cloud in self.point_clouds.items() if cloud is not None}
-
-    def load_default_configurations(self) -> List['Scene.Configuration']:
-        return [
-            self.Configuration(position='front', helper='top', scaling_ratio=0.7),
-            self.Configuration(position='back', helper='top', scaling_ratio=0.7),
-            self.Configuration(position='top', helper='front', scaling_ratio=0.7),
-        ]
-
-    @property
-    def configurations(self) -> List['Scene.Configuration']:
-        return self._configurations
-
-    @configurations.setter
-    def configurations(self, val: List[Tuple[str, str, float]]):
-        _configurations = []
-        for configuration in val:
-            position, helper, scaling_ratio = configuration
-            if position not in self.positions or helper not in self.positions:
-                raise ValueError(f'position and helper must be in the positions: {self.positions}')
-            _configurations.append(self.Configuration(position, helper, scaling_ratio))
-
-        self._configurations = _configurations
-
-    @property
-    def configurations_str(self):
-        return '_'.join([f'{conf.position}{str(conf.scaling_ratio).replace('.', '')}' for conf in self.configurations])
 
     @staticmethod
     def load_cameras():
@@ -119,27 +116,12 @@ class Scene:
 
         return masks
 
-    def convert_to_meshes(self):
-        meshes = {}
-        for position, cloud in self.available_point_clouds.items():
-            img = self.images[position]
-            mask = self.mesh_masks[position] if self.mesh_masks[position] is not None else self.masks[position]
-            vertices, faces, face_colors = vt.points_3d_to_trimesh(img, cloud, valid=mask)
-            meshes[position] = trimesh.Trimesh(vertices=vertices, faces=faces, face_colors=face_colors)
-
-        return meshes
-
-    def masked_point_clouds(self):
-        masked_point_clouds = {}
-        for position, cloud in self.available_point_clouds.items():
-            mask = torch.as_tensor(self.masks[position], dtype=torch.bool).flatten()
-            masked_point_clouds[position] = cloud[mask]
-
-        return masked_point_clouds
-
-    def generate_point_clouds(self):
-        for configuration in self.configurations:
-            self.point_clouds[configuration.position] = self.create_point_cloud(*configuration)
+    def generate_depth_maps(self):
+        visualize = False
+        for configuration in self.depth_configurations:
+            position, position_helper, scaling_ratio = configuration
+            depth_map = self.get_depth_map(position, position_helper, scaling_ratio, visualize)
+            self.depth_maps[position] = depth_map
 
     @staticmethod
     def get_border_types(position, position_helper):
@@ -155,15 +137,14 @@ class Scene:
 
         raise ValueError(f'Not implemented for the position pair: {(position, position_helper)}')
 
-    def create_point_cloud(self, position, position_helper, scaling_ratio=0.7, visualize=True):
+    def get_depth_map(self, position, position_helper, scaling_ratio, visualize):
         """
-        Create a mesh for position, utilizing position_helper.
+        Derive depth map for position by utilizing position_helper
 
-        :param position: The position for which to create the mesh.
-        :param position_helper: The position which helps to create mesh.
+        :param position: The position for which to derive depth map.
+        :param position_helper: The position which helps to derive depth map.
         :param scaling_ratio: The ratio of what percentage the relative depth is scaled by absolute depth.
         :param visualize: Show visualization of the process if True.
-        :return: trimesh.Trimesh
         """
         cam: Camera = self.cameras[position]
         cam_helper: Camera = self.cameras[position_helper]
@@ -224,10 +205,43 @@ class Scene:
                 cv.circle(img_helper_, (int(intersections[i][0]), int(intersections[i][1])), 5, Colors.GREEN.value, 5)
                 ege.draw_epipolar_line(img_helper_, lines[i])
 
-            cv.imshow(f'Create Point Cloud: {position}', img_)
-            cv.imshow(f'Create Point Cloud: {position_helper}', img_helper_)
+            cv.imshow(f'Get Depth Map: {position}', img_)
+            cv.imshow(f'Get Depth Map: {position_helper}', img_helper_)
             cv.waitKey()
             cv.destroyAllWindows()
 
-        cam_points = cam.create_point_cloud_by_depth_map(depth_map_abs)
+        return depth_map_abs
+
+    def generate_point_clouds(self):
+        # TODO use only the positions which have depth map.
+        positions = self.positions
+        for position in positions:
+            self.point_clouds[position] = self.create_point_cloud(position)
+
+    def create_point_cloud(self, position):
+        # TODO return None incase depth map is missing.
+        cam = self.cameras[position]
+        depth_map = self.depth_maps[position]
+
+        assert depth_map is not None, f'No depth map for {position}'
+
+        cam_points = cam.create_point_cloud_by_depth_map(depth_map)
         return cam.transform_to_world(cam_points)
+
+    def convert_to_meshes(self):
+        meshes = {}
+        for position, cloud in self.available_point_clouds.items():
+            img = self.images[position]
+            mask = self.mesh_masks[position] if self.mesh_masks[position] is not None else self.masks[position]
+            vertices, faces, face_colors = vt.points_3d_to_trimesh(img, cloud, valid=mask)
+            meshes[position] = trimesh.Trimesh(vertices=vertices, faces=faces, face_colors=face_colors)
+
+        return meshes
+
+    def masked_point_clouds(self):
+        masked_point_clouds = {}
+        for position, cloud in self.available_point_clouds.items():
+            mask = torch.as_tensor(self.masks[position], dtype=torch.bool).flatten()
+            masked_point_clouds[position] = cloud[mask]
+
+        return masked_point_clouds
