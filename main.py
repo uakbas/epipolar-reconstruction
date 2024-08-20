@@ -31,9 +31,19 @@ def show_point_clouds():
     trimesh_scene.export(file_obj=export_file, file_type='obj')
 
 
+def voxel_voting():
+    scene_num = 1
+    scene_dir = f'scenes/scene_{scene_num}'
+    scene = Scene(scene_dir=scene_dir)
+    cloud = scene.generate_voxel_volume_by_voting()
+    t_cloud = trimesh.PointCloud(cloud)
+    t_cloud.export(file_obj='voxel_voting.obj')
+
+
 def main():
-    show_meshes()
+    # show_meshes()
     # show_point_clouds()
+    voxel_voting()
 
 
 if __name__ == '__main__':

@@ -47,6 +47,7 @@ class Camera:
         self.t = t
         self.sensor = sensor if sensor is not None else Sensor()
         self.K = self.calibration_matrix(self.sensor)
+        self.projection_matrix = create_projection_matrix(self.R, self.t, self.K)
 
     @property
     def sensor_resolution(self):
@@ -62,6 +63,22 @@ class Camera:
             [0, fy, img_h / 2],
             [0, 0, 1]
         ], dtype=torch.float32)
+
+    def project(self, points):
+        """
+        Projects the points on the world coordinate system in to image coordinate system of the camera (self).
+        Projected points need to be divided by the depth values. Depth values are the depths of 3D points in
+        the camera coordinate system.
+
+        :param points: The points to be projected.
+        :return: (x,y) coordinates of projected points, Depths of the points in the camera coordinate system
+        """
+        N, THREE = points.shape
+        assert THREE == 3, 'Points must have shape of (N,3) where N is the number of points.'
+
+        points_projected = self.projection_matrix @ homogenize(points.T)
+        depths = points_projected[2]
+        return (points_projected[:2] / depths).T, depths
 
     def transformation_between(self, camera: 'Camera'):
         """
