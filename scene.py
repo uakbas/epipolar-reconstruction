@@ -247,7 +247,7 @@ class Scene:
 
         return masked_point_clouds
 
-    def create_point_cloud_by_voxel_voting(self, positions=None, depth_margin=50, min_vote_required=2):
+    def create_voxel_volume(self, positions=None, depth_margin=50, min_vote_required=2):
         volume_limits = [(-self.radius + 1, self.radius - 1) for _ in ['x', 'y', 'z']]
         volume = create_volume(limits=volume_limits, sampling_step=2)
         volume_votes = []
@@ -261,5 +261,5 @@ class Scene:
             volume_votes.append(volume_vote)
 
         total_volume_vote = torch.sum(torch.stack(volume_votes), dim=0)
-        is_valid_voxel = total_volume_vote >= min_vote_required
-        return volume[is_valid_voxel]
+        volume_mask = total_volume_vote >= min_vote_required
+        return volume[volume_mask], volume_mask
