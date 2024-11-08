@@ -27,10 +27,11 @@ def visualize_points(points: np.ndarray, colors: np.ndarray = None):
     # scene.export('test.obj', 'obj')
 
 
-def create_sphere(volume: torch.Tensor, radius, sampling_step=1):
+def create_sphere(volume: torch.Tensor, radius):
     points = volume.reshape(-1, 3)
-    sampling_mask = torch.zeros(points.shape[0], dtype=torch.int)
-    sampling_mask[::sampling_step] = 1
+    # sampling_step=1
+    # sampling_mask = torch.zeros(points.shape[0], dtype=torch.int)
+    # sampling_mask[::sampling_step] = 1
     return points[points.norm(dim=-1) < radius]
 
 
@@ -129,15 +130,18 @@ class FourCamScene:
         return image
 
     def shoot(self, target_dir, show=False):
-        for position in self.cameras.keys():
+        for i, position in enumerate(self.cameras.keys()):
             image = self.shoot_by_position(position)
             if show:
                 cv.imshow(position, image)
             else:
-                cv.imwrite(os.path.join(target_dir, f'{position}.png'), image)
+                cv.imwrite(os.path.join(target_dir, f'{i}_{position}.png'), image)
 
         if show:
             cv.waitKey()
+
+    def export_occupancy(self, save_dir):
+        torch.save(self.volume_occupancy, os.path.join(save_dir, 'volume_occupancy.pt'))
 
 
 def main():
@@ -145,6 +149,7 @@ def main():
     object_dir = os.path.join('scene_objects', 'bunny')
     four_cam_scene.load_object(os.path.join(object_dir, 'bun_zipper.ply'), max_norm=200)
     four_cam_scene.shoot(show=False, target_dir=object_dir)
+    four_cam_scene.export_occupancy(object_dir)
     four_cam_scene.visualize()
 
 
