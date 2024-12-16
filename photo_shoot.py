@@ -73,7 +73,7 @@ class FourCamScene:
         displacement = volume_dims[[1, 0, 2]]  # (y, x, z) --> (x, y, z)
         points = points + displacement
 
-        self.volume_occupancy = torch.zeros_like(self.volume_occupancy)
+        self.volume_occupancy = torch.zeros_like(self.volume_occupancy)  # TODO remove
         self.volume_occupancy[points[:, 1], points[:, 0], points[:, 2]] = 1
 
     def generate_sphere(self, sphere_radius):
@@ -144,13 +144,17 @@ class FourCamScene:
         torch.save(self.volume_occupancy, os.path.join(save_dir, 'volume_occupancy.pt'))
 
 
-def main():
+def create_bunny_data():
     four_cam_scene = FourCamScene()
     object_dir = os.path.join('scene_objects', 'bunny')
     four_cam_scene.load_object(os.path.join(object_dir, 'bun_zipper.ply'), max_norm=200)
     four_cam_scene.shoot(show=False, target_dir=object_dir)
     four_cam_scene.export_occupancy(object_dir)
     four_cam_scene.visualize()
+
+
+def main():
+    create_bunny_data()
 
 
 if '__main__' == __name__:
