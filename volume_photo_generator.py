@@ -64,6 +64,14 @@ class VolumePhotoGenerator:
         # Set volume occupancy
         self._volume_occupancy = value
 
+    @property
+    def scene_object(self):
+        return self.volume[self.volume_occupancy == 1]
+
+    @property
+    def volume_dims(self):
+        return torch.as_tensor(self.volume_occupancy.shape, dtype=torch.int)
+
     def set_occupancy_by_points_3d(self, points):
         assert points.ndim == 2 and points.shape[1] == 3, 'Points must have shape of (N, 3)'
 
