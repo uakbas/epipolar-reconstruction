@@ -14,6 +14,9 @@ class VolumePhotoGenerator:
     # As for cameras, everything is same. Just take the front camera as reference.
     # Rotate the scene around the origin so that the point of view matches with the front camera.
 
+    # TODO Make the volume sampled step by step instead of fixed volume radius.
+    # TODO This will handle the scaling process at the same time.
+
     def __init__(self):
         # Set cameras.
         cam_distance = 420
@@ -40,7 +43,7 @@ class VolumePhotoGenerator:
         self.volume = torch.stack([grid_x, grid_y, grid_z], dim=-1)
 
         # For each point ==> Occupied 1 | Empty 0 | All zeros initially.
-        self.volume_occupancy = torch.zeros(*self.volume.shape[:3])
+        self._volume_occupancy = torch.zeros(*self.volume.shape[:3])
 
     @property
     def scene_object(self):
@@ -50,8 +53,16 @@ class VolumePhotoGenerator:
     def volume_dims(self):
         return torch.as_tensor(self.volume_occupancy.shape, dtype=torch.int)
 
-    def reset_occupancy(self):
-        self.volume_occupancy = torch.zeros_like(self.volume_occupancy)
+    @property
+    def volume_occupancy(self):
+        return self._volume_occupancy
+
+    @volume_occupancy.setter
+    def volume_occupancy(self, value):
+        # Reset volume occupancy
+        self._volume_occupancy = torch.zeros_like(self._volume_occupancy)
+        # Set volume occupancy
+        self._volume_occupancy = value
 
     def set_occupancy_by_points_3d(self, points):
         assert points.ndim == 2 and points.shape[1] == 3, 'Points must have shape of (N, 3)'
@@ -62,7 +73,9 @@ class VolumePhotoGenerator:
         displacement = volume_dims[[1, 0, 2]]  # (y, x, z) --> (x, y, z)
         points = torch.round(points).to(dtype=torch.int) + displacement
 
-        self.volume_occupancy[points[:, 1], points[:, 0], points[:, 2]] = 1
+        volume_occupancy = torch.zeros_like(self.volume_occupancy)
+        volume_occupancy[points[:, 1], points[:, 0], points[:, 2]] = 1
+        self.volume_occupancy = volume_occupancy
 
     def scale_occupancy(self, scale=1):
         assert scale == 1 or scale % 2 == 0, 'Invalid scale value.'
