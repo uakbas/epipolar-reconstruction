@@ -193,12 +193,21 @@ def create_bunny_data():
     gen.shoot(show=False, target_dir=object_dir)
     # gen.export_scene_object(object_dir)
     gen.export_occupancy(object_dir, scale=scale_coefficient)
-    # gen.visualize_occ(scale=scale_coefficient)
-    gen.visualize()
+    gen.visualize_occ(scale=scale_coefficient)
+    # gen.visualize()
+
+
+def create_utah_teapot_data():
+    object_dir = os.path.join('scene_objects', 'utah_teapot')
+    gen = VolumePhotoGenerator()
+    gen.load_object(os.path.join(object_dir, 'utah_teapot.obj'), max_norm=192)
+    gen.shoot(show=False, target_dir=object_dir)
+    gen.visualize_occ(scale=4)
 
 
 def main():
     create_bunny_data()
+    # create_utah_teapot_data()
 
 
 if '__main__' == __name__:
