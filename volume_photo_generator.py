@@ -3,11 +3,19 @@ import trimesh
 import os
 import numpy as np
 import cv2 as cv
+from pathlib import Path
 
 from camera import Camera, get_rot_mat_x, Sensor
 
 
-class VolumePhotoGenerator:
+class SDF:
+
+    @staticmethod
+    def sphere(radius):
+        return lambda p: torch.norm(p, dim=-1) - radius
+
+
+class VolumeDataGenerator:
     # Volume is created using the axes in the y, x, z order.
     # For a convenient imagination, we could consider y goes down, x goes right and z goes inside.
     # This is to imagine the volume as 3D tensor.
@@ -46,23 +54,13 @@ class VolumePhotoGenerator:
         self._volume_occupancy = torch.zeros(*self.volume.shape[:3])
 
     @property
-    def scene_object(self):
-        return self.volume[self.volume_occupancy == 1]
-
-    @property
-    def volume_dims(self):
-        return torch.as_tensor(self.volume_occupancy.shape, dtype=torch.int)
-
-    @property
     def volume_occupancy(self):
         return self._volume_occupancy
 
     @volume_occupancy.setter
     def volume_occupancy(self, value):
-        # Reset volume occupancy
-        self._volume_occupancy = torch.zeros_like(self._volume_occupancy)
-        # Set volume occupancy
-        self._volume_occupancy = value
+        self._volume_occupancy = torch.zeros_like(self._volume_occupancy)  # Reset volume occupancy
+        self._volume_occupancy = value  # Set volume occupancy
 
     @property
     def scene_object(self):
@@ -72,10 +70,8 @@ class VolumePhotoGenerator:
     def volume_dims(self):
         return torch.as_tensor(self.volume_occupancy.shape, dtype=torch.int)
 
-    def set_occupancy_by_points_3d(self, points):
+    def generate_volume_occupancy_from_points_3d(self, points):
         assert points.ndim == 2 and points.shape[1] == 3, 'Points must have shape of (N, 3)'
-
-        self.reset_occupancy()
 
         volume_dims = self.volume_dims // 2
         displacement = volume_dims[[1, 0, 2]]  # (y, x, z) --> (x, y, z)
@@ -83,41 +79,36 @@ class VolumePhotoGenerator:
 
         volume_occupancy = torch.zeros_like(self.volume_occupancy)
         volume_occupancy[points[:, 1], points[:, 0], points[:, 2]] = 1
-        self.volume_occupancy = volume_occupancy
+        return volume_occupancy
 
-    def scale_occupancy(self, scale=1):
+    def scale_volume_occupancy(self, scale=1):
         assert scale == 1 or scale % 2 == 0, 'Invalid scale value.'
         assert (self.volume_dims % scale == 0).all(), 'Shape values must be multiple of the scale.'
 
-        occ = self.volume_occupancy
+        volume_occupancy = self.volume_occupancy
         shape = torch.stack([self.volume_dims // scale, torch.full_like(self.volume_dims, scale)], dim=0).T.flatten()
-        # occ_scaled = occ.view(*shape).sum(dim=(1, 3, 5)) > (scale * scale * scale) / 2
-        occ_scaled = occ.view(*shape).sum(dim=(1, 3, 5)) > 0
-        occ_scaled = occ_scaled.to(torch.int32)
-
-        return occ_scaled
+        volume_occupancy_scaled = volume_occupancy.view(*shape).sum(dim=(1, 3, 5)) > 0  # (scale * scale * scale) / 2
+        return volume_occupancy_scaled.to(torch.int32)
 
     def load_object(self, file: str, max_norm):
         assert max_norm < torch.max(self.volume_dims // 2) * 0.95, 'Max norm is too big.'
 
         mesh = trimesh.load(file)
-
-        # Centralize the mesh around origin.
-        mesh.apply_translation(-mesh.center_mass)
-
-        # Scale the mesh to make sure it is within volume limits.
-        mesh.apply_scale(max_norm / mesh.extents.max())
+        mesh.apply_translation(-mesh.center_mass)  # Centralize the mesh around origin.
+        mesh.apply_scale(max_norm / mesh.extents.max())  # Scale the mesh to make sure it is within volume limits.
 
         points = torch.tensor(mesh.voxelized(pitch=1).points, dtype=torch.float32)
+        points[:, 0:2] = -points[:, 0:2]  # Adjust for opencv convention: x,y,z to -x,-y,z.
 
-        # Adjust for opencv convention: x,y,z to -x,-y,z.
-        points[:, 0:2] = -points[:, 0:2]
+        self.volume_occupancy = self.generate_volume_occupancy_from_points_3d(points)
 
-        self.set_occupancy_by_points_3d(points)
+    def load_sphere(self, radius):
+        sdf = SDF.sphere(radius)
+        self.volume_occupancy = (sdf(self.volume) < 0).to(torch.int32)
 
     def visualize(self, colors: np.ndarray = None):
+        """ Visualize the scene (color optional) """
         scene = trimesh.Scene()
-
         scene.add_geometry(trimesh.PointCloud(self.scene_object.numpy(), colors))
         scene.add_geometry(trimesh.creation.axis(origin_size=5))
 
@@ -127,10 +118,8 @@ class VolumePhotoGenerator:
 
         scene.show()
 
-    def visualize_occ(self, scale=1):
-        occ_scaled = self.scale_occupancy(scale)
-        voxel_grid = trimesh.voxel.VoxelGrid(occ_scaled.numpy())
-        voxel_grid.show()
+    def visualize_volume_occupancy(self, scale=1):
+        trimesh.voxel.VoxelGrid(self.scale_volume_occupancy(scale).numpy()).show()
 
     def shoot_by_position(self, position: torch, **kwargs):
         perturbation_distance = kwargs.get('perturbation_distance', 0.5)
@@ -177,9 +166,11 @@ class VolumePhotoGenerator:
         if show:
             cv.waitKey()
 
-    def export_occupancy(self, save_dir, scale=1):
-        occ_scaled = self.scale_occupancy(scale)
-        torch.save(occ_scaled, os.path.join(save_dir, f'volume_occupancy_{scale}x.pt'))
+    def export_volume_occupancy(self, save_dir, scale=1):
+        torch.save(
+            self.scale_volume_occupancy(scale),
+            os.path.join(save_dir, f'volume_occupancy_{scale}x.pt')
+        )
 
     def export_scene_object(self, save_dir):
         torch.save(
@@ -204,31 +195,27 @@ class VolumePhotoGenerator:
         self.volume_occupancy = vol_occupancy
 
 
-def create_bunny_data():
-    object_dir = os.path.join('scene_objects', 'bunny')
-    scale_coefficient = 8
-
-    gen = VolumePhotoGenerator()
-    gen.load_object(os.path.join(object_dir, 'bun_zipper.ply'), max_norm=192)
-
+def create_data(file_path, scale, max_norm=192):
+    object_dir = Path(file_path).parent
+    gen = VolumeDataGenerator()
+    gen.load_object(file_path, max_norm)
     gen.shoot(show=False, target_dir=object_dir)
-    # gen.export_scene_object(object_dir)
-    gen.export_occupancy(object_dir, scale=scale_coefficient)
-    gen.visualize_occ(scale=scale_coefficient)
+    gen.export_volume_occupancy(object_dir, scale=scale)
+    gen.visualize_volume_occupancy(scale=scale)
     # gen.visualize()
 
 
-def create_utah_teapot_data():
-    object_dir = os.path.join('scene_objects', 'utah_teapot')
-    gen = VolumePhotoGenerator()
-    gen.load_object(os.path.join(object_dir, 'utah_teapot.obj'), max_norm=192)
+def create_data_by_sdf(object_dir, scale):
+    gen = VolumeDataGenerator()
+    gen.load_sphere(radius=100)
     gen.shoot(show=False, target_dir=object_dir)
-    gen.visualize_occ(scale=4)
+    gen.visualize_volume_occupancy(scale=scale)
 
 
 def main():
-    create_bunny_data()
-    # create_utah_teapot_data()
+    # create_data('scene_objects/stanford_bunny/bun_zipper.ply', 4)
+    # create_data('scene_objects/utah_teapot/utah_teapot.obj', 4)
+    create_data_by_sdf('scene_objects/sphere', scale=4)
 
 
 if '__main__' == __name__:
