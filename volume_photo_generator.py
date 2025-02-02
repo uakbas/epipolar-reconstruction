@@ -209,13 +209,14 @@ def create_data_by_sdf(object_dir, scale):
     gen = VolumeDataGenerator()
     gen.load_sphere(radius=100)
     gen.shoot(show=False, target_dir=object_dir)
+    gen.export_volume_occupancy(object_dir, scale=scale)
     gen.visualize_volume_occupancy(scale=scale)
 
 
 def main():
     # create_data('scene_objects/stanford_bunny/bun_zipper.ply', 4)
     # create_data('scene_objects/utah_teapot/utah_teapot.obj', 4)
-    create_data_by_sdf('scene_objects/sphere', scale=4)
+    create_data_by_sdf('scene_objects/sphere', scale=24)
 
 
 if '__main__' == __name__:
