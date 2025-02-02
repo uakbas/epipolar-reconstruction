@@ -1,3 +1,5 @@
+import os.path
+
 import torch
 import math
 from dataclasses import dataclass
@@ -48,6 +50,34 @@ class Camera:
         self.sensor = sensor if sensor is not None else Sensor()
         self.K = self.calibration_matrix(self.sensor)
         self.projection_matrix = create_projection_matrix(self.R, self.t, self.K)
+
+    def __str__(self):
+        str_ = "extrinsic\n"
+
+        extrinsic: torch.Tensor = create_transformation_matrix(self.R, self.t)
+        last_row = torch.zeros(extrinsic.shape[1])
+        last_row[-1] = 1
+        last_row = last_row.unsqueeze(0)
+        extrinsic = torch.cat((extrinsic, last_row), dim=0)
+        extrinsic = torch.round(extrinsic, decimals=10)
+        extrinsic = torch.where(torch.eq(extrinsic, -0.0), 0.0, extrinsic)
+        for row in extrinsic:
+            str_ += " ".join(map(str, row.tolist())) + "\n"
+
+        str_ += "\n"
+        str_ += "intrinsic\n"
+
+        intrinsic = self.K
+        intrinsic = torch.round(intrinsic, decimals=10)
+        intrinsic = torch.where(torch.eq(intrinsic, -0.0), 0.0, intrinsic)
+        for row in intrinsic:
+            str_ += " ".join(map(str, row.tolist())) + "\n"
+
+        return str_
+
+    def export(self, export_dir, export_file='camera'):
+        with open(os.path.join(export_dir, f'{export_file}.txt'), 'w') as file:
+            file.write(self.__str__())
 
     @property
     def sensor_resolution(self):
