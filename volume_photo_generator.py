@@ -181,6 +181,10 @@ class VolumeDataGenerator:
             os.path.join(save_dir, 'scene_conf.pt')
         )
 
+    def export_cameras(self, save_dir):
+        for pos, cam in self.cameras.items():
+            cam.export(save_dir, pos)
+
     def reuse_scene_object(self):
         # TODO Test.
         distance = self.volume_radius
@@ -210,6 +214,7 @@ def create_data_by_sdf(object_dir, scale):
     gen.load_sphere(radius=100)
     gen.shoot(show=False, target_dir=object_dir)
     gen.export_volume_occupancy(object_dir, scale=scale)
+    gen.export_cameras(object_dir)
     gen.visualize_volume_occupancy(scale=scale)
 
 
