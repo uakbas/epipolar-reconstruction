@@ -11,8 +11,8 @@ from camera import Camera, get_rot_mat_x, Sensor
 class SDF:
 
     @staticmethod
-    def sphere(radius):
-        return lambda p: torch.norm(p, dim=-1) - radius
+    def sphere(radius, center):
+        return lambda p: torch.norm(p - center, dim=-1) - radius
 
 
 class VolumeDataGenerator:
@@ -28,7 +28,7 @@ class VolumeDataGenerator:
     def __init__(self):
         # Set cameras.
         cam_distance = 420
-        sensor = Sensor(focal_length=9.2, size=(11.33, 7.13), resolution=(256, 160))
+        sensor = Sensor(focal_length=9.2, size=(11.33, 11.33), resolution=(256, 256))
         self.cameras = {
             'front': Camera(get_rot_mat_x(0), torch.tensor([0, 0, -cam_distance], dtype=torch.float32), sensor),
             'top': Camera(get_rot_mat_x(270), torch.tensor([0, -cam_distance, 0], dtype=torch.float32), sensor),
@@ -102,8 +102,8 @@ class VolumeDataGenerator:
 
         self.volume_occupancy = self.generate_volume_occupancy_from_points_3d(points)
 
-    def load_sphere(self, radius):
-        sdf = SDF.sphere(radius)
+    def load_sphere(self, radius, center):
+        sdf = SDF.sphere(radius, center)
         self.volume_occupancy = (sdf(self.volume) < 0).to(torch.int32)
 
     def visualize(self, colors: np.ndarray = None):
@@ -156,12 +156,19 @@ class VolumeDataGenerator:
         return image
 
     def shoot(self, target_dir, show=False):
+        image_dir = os.path.join(target_dir, "image")
+        mask_dir = os.path.join(target_dir, "mask")
+
+        os.mkdir(image_dir)
+        os.mkdir(mask_dir)
+
         for i, position in enumerate(self.cameras.keys()):
             image = self.shoot_by_position(position)
             if show:
                 cv.imshow(position, image)
             else:
-                cv.imwrite(os.path.join(target_dir, f'{i}_{position}.png'), image)
+                cv.imwrite(os.path.join(image_dir, f'{position}.png'), image)
+                cv.imwrite(os.path.join(mask_dir, f'{position}.png'), image)
 
         if show:
             cv.waitKey()
@@ -169,7 +176,8 @@ class VolumeDataGenerator:
     def export_volume_occupancy(self, save_dir, scale=1):
         torch.save(
             self.scale_volume_occupancy(scale),
-            os.path.join(save_dir, f'volume_occupancy_{scale}x.pt')
+            # os.path.join(save_dir, f'volume_occupancy_{scale}x.pt')
+            os.path.join(save_dir, f'voxel_grid.pt')
         )
 
     def export_scene_object(self, save_dir):
@@ -209,9 +217,12 @@ def create_data(file_path, scale, max_norm=192):
     # gen.visualize()
 
 
-def create_data_by_sdf(object_dir, scale):
+def create_data_by_sdf(object_dir, scale, center):
+    os.makedirs(object_dir, exist_ok=False)
+    os.makedirs(os.path.join(object_dir, f'{center}'), exist_ok=False)
+
     gen = VolumeDataGenerator()
-    gen.load_sphere(radius=100)
+    gen.load_sphere(radius=100, center=center)
     gen.shoot(show=False, target_dir=object_dir)
     gen.export_volume_occupancy(object_dir, scale=scale)
     gen.export_cameras(object_dir)
@@ -221,7 +232,21 @@ def create_data_by_sdf(object_dir, scale):
 def main():
     # create_data('scene_objects/stanford_bunny/bun_zipper.ply', 4)
     # create_data('scene_objects/utah_teapot/utah_teapot.obj', 4)
-    create_data_by_sdf('scene_objects/sphere', scale=24)
+    # create_data_by_sdf('scene_objects/test', scale=24)
+
+    exit(0)
+    start, end, step = -100, 100, 5
+    y_line = torch.linspace(start, end, step, dtype=torch.float)
+    x_line = torch.linspace(start, end, step, dtype=torch.float)
+    z_line = torch.linspace(start, end, step, dtype=torch.float)
+    grid_y, grid_x, grid_z = torch.meshgrid([y_line, x_line, z_line], indexing='ij')
+    centers = torch.stack([grid_x, grid_y, grid_z], dim=-1).view((-1, 3))
+
+    for i, center in enumerate(centers):
+        create_data_by_sdf(f'scene_objects/training/scene_{i:04}', scale=24, center=center)
+        print(f'created: scene_{i:04} | center: {center}')
+
+
 
 
 if '__main__' == __name__:
