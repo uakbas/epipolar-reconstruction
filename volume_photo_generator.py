@@ -55,22 +55,33 @@ class VolumeDataGenerator:
 
     @property
     def volume_occupancy(self):
+        """ It stores the occupancy values for each voxel: {0, 1}"""
         return self._volume_occupancy
 
     @volume_occupancy.setter
     def volume_occupancy(self, value):
-        self._volume_occupancy = torch.zeros_like(self._volume_occupancy)  # Reset volume occupancy
-        self._volume_occupancy = value  # Set volume occupancy
+        """ Reset volume occupancy before setting new occupancy values. """
+        self._volume_occupancy = torch.zeros_like(self._volume_occupancy)
+        self._volume_occupancy = value
 
     @property
     def scene_object(self):
+        """
+            Scene object represents 3D points which belongs to the object.
+            3D coordinates are centers of corresponding voxels.
+        """
         return self.volume[self.volume_occupancy == 1]
 
     @property
     def volume_dims(self):
+        """ Dimensions of the entire volume. """
         return torch.as_tensor(self.volume_occupancy.shape, dtype=torch.int)
 
     def generate_volume_occupancy_from_points_3d(self, points):
+        """ Given 3D points (do not have to be centers of voxels), generate volume occupancy.
+            Volume occupancy is the standard representation for the objects. So, first thing to do is to generate
+            a volume occupancy.
+        """
         assert points.ndim == 2 and points.shape[1] == 3, 'Points must have shape of (N, 3)'
 
         volume_dims = self.volume_dims // 2
@@ -82,6 +93,7 @@ class VolumeDataGenerator:
         return volume_occupancy
 
     def scale_volume_occupancy(self, scale=1):
+        """ Scale volume occupancy by a given scaling factor. """
         assert scale == 1 or scale % 2 == 0, 'Invalid scale value.'
         assert (self.volume_dims % scale == 0).all(), 'Shape values must be multiple of the scale.'
 
@@ -91,6 +103,9 @@ class VolumeDataGenerator:
         return volume_occupancy_scaled.to(torch.int32)
 
     def load_object(self, file: str, max_norm):
+        """ Load a 3D object: .ply, .obj etc.
+            Centralize/Scale the object and generate volume occupancy.
+        """
         assert max_norm < torch.max(self.volume_dims // 2) * 0.95, 'Max norm is too big.'
 
         mesh = trimesh.load(file)
@@ -103,25 +118,34 @@ class VolumeDataGenerator:
         self.volume_occupancy = self.generate_volume_occupancy_from_points_3d(points)
 
     def load_sphere(self, radius, center):
+        """ Create an SDF function for the given radius and center.
+            Generate volume occupancy by using the SDF function.
+        """
         sdf = SDF.sphere(radius, center)
         self.volume_occupancy = (sdf(self.volume) < 0).to(torch.int32)
 
     def visualize(self, colors: np.ndarray = None):
-        """ Visualize the scene (color optional) """
+        """ Visualize the entire scene as point clouds.
+            Add a front camera for reference.
+        """
         scene = trimesh.Scene()
-        scene.add_geometry(trimesh.PointCloud(self.scene_object.numpy(), colors))
-        scene.add_geometry(trimesh.creation.axis(origin_size=5))
 
+        # Create front cam.
         cam_front = trimesh.creation.box(extents=(10, 10, 50))
         cam_front.apply_translation([0, 0, -100])
+
+        scene.add_geometry(trimesh.creation.axis(origin_size=5))
+        scene.add_geometry(trimesh.PointCloud(self.scene_object.numpy(), colors))
         scene.add_geometry(cam_front)
 
         scene.show()
 
     def visualize_volume_occupancy(self, scale=1):
+        """ Scale and visualize the volume occupancy. """
         trimesh.voxel.VoxelGrid(self.scale_volume_occupancy(scale).numpy()).show()
 
     def shoot_by_position(self, position: torch, **kwargs):
+        """ Take photo for the camera at the given position. """
         perturbation_distance = kwargs.get('perturbation_distance', 0.5)
 
         cam: Camera = self.cameras[position]
@@ -159,8 +183,11 @@ class VolumeDataGenerator:
         image_dir = os.path.join(target_dir, "image")
         mask_dir = os.path.join(target_dir, "mask")
 
-        os.mkdir(image_dir)
-        os.mkdir(mask_dir)
+        if not os.path.exists(image_dir):
+            os.mkdir(image_dir)
+
+        if not os.path.exists(mask_dir):
+            os.mkdir(mask_dir)
 
         for i, position in enumerate(self.cameras.keys()):
             image = self.shoot_by_position(position)
@@ -174,37 +201,13 @@ class VolumeDataGenerator:
             cv.waitKey()
 
     def export_volume_occupancy(self, save_dir, scale=1):
-        torch.save(
-            self.scale_volume_occupancy(scale),
-            # os.path.join(save_dir, f'volume_occupancy_{scale}x.pt')
-            os.path.join(save_dir, f'voxel_grid.pt')
-        )
-
-    def export_scene_object(self, save_dir):
-        torch.save(
-            {
-                'volume_radius': self.volume_radius,
-                'scene_object': self.scene_object,
-            },
-            os.path.join(save_dir, 'scene_conf.pt')
-        )
+        """ Scale and export occupancy. """
+        vo_scaled = self.scale_volume_occupancy(scale)
+        torch.save(vo_scaled, os.path.join(save_dir, f'voxel_grid.pt'))
 
     def export_cameras(self, save_dir):
         for pos, cam in self.cameras.items():
             cam.export(save_dir, pos)
-
-    def reuse_scene_object(self):
-        # TODO Test.
-        distance = self.volume_radius
-        points = self.scene_object.to(dtype=torch.int)
-
-        vol_occupancy_shape = [2 * distance, 2 * distance, 2 * distance]
-        vol_occupancy = torch.zeros(vol_occupancy_shape)
-
-        indexes = points + torch.tensor([distance, distance, distance])  # x, y, z
-        vol_occupancy[indexes[:, 1], indexes[:, 0], indexes[:, 2]] = 1
-
-        self.volume_occupancy = vol_occupancy
 
 
 def create_data(file_path, scale, max_norm=192):
@@ -214,7 +217,7 @@ def create_data(file_path, scale, max_norm=192):
     gen.shoot(show=False, target_dir=object_dir)
     gen.export_volume_occupancy(object_dir, scale=scale)
     gen.visualize_volume_occupancy(scale=scale)
-    # gen.visualize()
+    gen.visualize()
 
 
 def create_data_by_sdf(object_dir, scale, center):
@@ -230,7 +233,7 @@ def create_data_by_sdf(object_dir, scale, center):
 
 
 def main():
-    # create_data('scene_objects/stanford_bunny/bun_zipper.ply', 4)
+    create_data('scene_objects/stanford_bunny/bun_zipper.ply', 4)
     # create_data('scene_objects/utah_teapot/utah_teapot.obj', 4)
     # create_data_by_sdf('scene_objects/test', scale=24)
 
@@ -245,8 +248,6 @@ def main():
     for i, center in enumerate(centers):
         create_data_by_sdf(f'scene_objects/training/scene_{i:04}', scale=24, center=center)
         print(f'created: scene_{i:04} | center: {center}')
-
-
 
 
 if '__main__' == __name__:
