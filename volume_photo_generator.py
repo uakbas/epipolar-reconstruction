@@ -1,8 +1,10 @@
 import torch
 import trimesh
 import os
+import itertools
 import numpy as np
 import cv2 as cv
+
 from pathlib import Path
 
 from camera import Camera, get_rot_mat_x, Sensor
@@ -122,7 +124,8 @@ class VolumeDataGenerator:
             Generate volume occupancy by using the SDF function.
         """
         sdf = SDF.sphere(radius, center)
-        self.volume_occupancy = (sdf(self.volume) < 0).to(torch.int32)
+        result = (sdf(self.volume) < 0).to(torch.int32)
+        self.volume_occupancy = result
 
     def visualize(self, colors: np.ndarray = None):
         """ Visualize the entire scene as point clouds.
@@ -142,7 +145,26 @@ class VolumeDataGenerator:
 
     def visualize_volume_occupancy(self, scale=1):
         """ Scale and visualize the volume occupancy. """
-        trimesh.voxel.VoxelGrid(self.scale_volume_occupancy(scale).numpy()).show()
+        vo_scaled = self.scale_volume_occupancy(scale)
+
+        for cord1, cord2 in list(itertools.product([0, -1], [0, -1])):
+            vo_scaled[:, cord1, cord2] = 1
+            vo_scaled[cord1, :, cord2] = 1
+            vo_scaled[cord1, cord2, :] = 1
+
+        transform = torch.tensor([
+            [0, 1, 0, 0],
+            [1, 0, 0, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1]
+        ])
+
+        vg = trimesh.voxel.VoxelGrid(vo_scaled.numpy(), transform=transform)
+
+        scene = trimesh.Scene()
+        scene.add_geometry(vg.as_boxes())
+        scene.add_geometry(trimesh.creation.axis(axis_radius=2, axis_length=min(vo_scaled.shape[0], 10)))
+        scene.show()
 
     def shoot_by_position(self, position: torch, **kwargs):
         """ Take photo for the camera at the given position. """
@@ -221,8 +243,8 @@ def create_data(file_path, scale, max_norm=192):
 
 
 def create_data_by_sdf(object_dir, scale, center):
-    os.makedirs(object_dir, exist_ok=False)
-    os.makedirs(os.path.join(object_dir, f'{center}'), exist_ok=False)
+    os.makedirs(object_dir, exist_ok=True)
+    os.makedirs(os.path.join(object_dir, f'{center}'), exist_ok=True)
 
     gen = VolumeDataGenerator()
     gen.load_sphere(radius=100, center=center)
@@ -232,7 +254,16 @@ def create_data_by_sdf(object_dir, scale, center):
     gen.visualize_volume_occupancy(scale=scale)
 
 
+def test():
+    print('testing')
+    center = torch.tensor([300, 300, 300], dtype=torch.float)
+    create_data_by_sdf('scene_objects/test', scale=8, center=center)
+    print('testing done')
+    exit(0)
+
+
 def main():
+    # test()
     create_data('scene_objects/stanford_bunny/bun_zipper.ply', 4)
     # create_data('scene_objects/utah_teapot/utah_teapot.obj', 4)
     # create_data_by_sdf('scene_objects/test', scale=24)
