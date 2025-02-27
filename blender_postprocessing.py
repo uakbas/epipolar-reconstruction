@@ -14,6 +14,7 @@ from camera import get_rot_mat_x, create_transformation_matrix, homogenize
 
 
 def scale_volume_occupancy(vo, scale=1):
+    # TODO Fix code duplication.
     """ Scale volume occupancy by a given scaling factor. """
     volume_dims = torch.as_tensor(vo.shape, dtype=torch.int)
 
@@ -26,6 +27,7 @@ def scale_volume_occupancy(vo, scale=1):
 
 
 def visualize_volume_occupancy(vo, scale=1):
+    # TODO Fix code duplication.
     vo_scaled = scale_volume_occupancy(vo, scale)
 
     # Fill volume edges for better visualization.
@@ -51,7 +53,15 @@ def visualize_volume_occupancy(vo, scale=1):
 
 
 VOLUME_RADIUS = 384  # Distance from origin to each face of the volume.
-VOLUME_SCALE = 24  # Scale factor for the volume occupancy grid.
+VOLUME_SCALE = 12  # Scale factor for the volume occupancy grid.
+ROOT = "/Users/uveyisakbas/Desktop/blender"
+DATASET_PATH = os.path.join(ROOT, "dataset")
+OUT_TXT_PATH = os.path.join(ROOT, "out_postprocessing.txt")
+VISUALIZE = False
+
+# Reset output text file.
+with open(OUT_TXT_PATH, "w") as f:
+    f.write("")
 
 # Transformation matrix to convert from Blender coordinates to volume occupancy coordinates.
 # Origin for volume occupancy coordinate system is at the top-left-front of the volume.
@@ -59,9 +69,7 @@ VOLUME_SCALE = 24  # Scale factor for the volume occupancy grid.
 # This transformation matrix helps to get voxels point coordinates in the volume occupancy coordinate system.
 transformation_matrix = create_transformation_matrix(get_rot_mat_x(270), torch.tensor([-VOLUME_RADIUS, -VOLUME_RADIUS, VOLUME_RADIUS], dtype=torch.float32))
 
-DATASET_PATH = os.path.join("/Users", "uveyisakbas", "Desktop", "blender_dataset", "test_scenes")
-for directory in os.listdir(DATASET_PATH):
-
+for directory in sorted(os.listdir(DATASET_PATH)):
     if directory.startswith("."):  # Skip hidden files.
         continue
 
@@ -72,16 +80,14 @@ for directory in os.listdir(DATASET_PATH):
     # Voxelize and get the voxel points.
     object_voxels = pv.voxelize(pv.read(os.path.join(scene_dir, "scene.obj")), density=2, check_surface=False)
     object_points = torch.as_tensor(object_voxels.points, dtype=torch.float32)
-    # print(torch.max(object_points))
 
     # Transform voxel points to volume occupancy indexes.
     occupied_voxel_indexes = torch.round((transformation_matrix @ homogenize(object_points.T)).T).to(dtype=torch.int)
 
     # Check if the voxel points are within the volume occupancy grid.
-    if torch.all(torch.logical_and(0 <= occupied_voxel_indexes, occupied_voxel_indexes < VOLUME_RADIUS * 2)):
-        print("valid")
-    else:
-        print(f"invalid: {directory}")
+    if not torch.all(torch.logical_and(0 <= occupied_voxel_indexes, occupied_voxel_indexes < VOLUME_RADIUS * 2)):
+        with open(OUT_TXT_PATH, "a") as f:
+            f.write(f"Invalid scene: {directory}\n")
         continue
 
     # Create a volume occupancy and fill the occupied voxels.
@@ -92,4 +98,5 @@ for directory in os.listdir(DATASET_PATH):
     volume_occupancy = scale_volume_occupancy(volume_occupancy, scale=VOLUME_SCALE)
     torch.save(volume_occupancy, os.path.join(scene_dir, "voxel_grid.pt"))
 
-    visualize_volume_occupancy(volume_occupancy)
+    if VISUALIZE:
+        visualize_volume_occupancy(volume_occupancy)
