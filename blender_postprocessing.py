@@ -67,19 +67,6 @@ def visualize_voxels_by_pyvista(voxels, use_atomize=False):
     plotter.show()
 
 
-def get_object_points(object_path):
-    """ Load object, voxelize and return the voxel points.
-    TODO figure out the relation between density and volume_scale, adjust dynamically.
-
-    :param object_path: Path of the object to be loaded.
-    :return: Voxel points.
-    """
-    mesh = pv.read(object_path)
-    voxels = pv.voxelize(mesh, density=2, check_surface=False)
-    points = torch.as_tensor(voxels.points, dtype=torch.float32)
-    return points
-
-
 def process():
     volume_radius = 384  # Distance from origin to each face of the volume.
     volume_scale = 12  # Scale factor for the volume occupancy grid.
@@ -103,7 +90,16 @@ def process():
         scene_dir = os.path.join(dataset_dir_path, directory)
 
         object_path = os.path.join(scene_dir, "scene.obj")
-        object_points = get_object_points(object_path)
+
+        """
+            Load object, voxelize and return the voxel points.
+            TODO figure out the relation between density and volume_scale, adjust dynamically.
+        """
+        object_mesh = pv.read(object_path)
+        object_voxels = pv.voxelize(object_mesh, density=2, check_surface=False)
+        object_points = torch.as_tensor(object_voxels.points, dtype=torch.float32)
+
+        visualize_voxels_by_pyvista(object_voxels)
 
         occupied_voxel_indexes = torch.round((trans_mat @ homogenize(object_points.T)).T).to(dtype=torch.int)
 
