@@ -10,8 +10,8 @@ import trimesh
 import itertools
 import pyvista as pv
 
+from pyvista.demos.logo import atomize
 from camera import get_rot_mat_x, create_transformation_matrix, homogenize
-
 
 def scale_volume_occupancy(vo, scale=1):
     # TODO Fix code duplication.
@@ -22,7 +22,7 @@ def scale_volume_occupancy(vo, scale=1):
     assert (volume_dims % scale == 0).all(), 'Shape values must be multiple of the scale.'
 
     shape = torch.stack([volume_dims // scale, torch.full_like(volume_dims, scale)], dim=0).T.flatten()
-    vo_scaled = vo.view(*shape).sum(dim=(1, 3, 5)) > 0  # (scale * scale * scale) / 2
+    vo_scaled = vo.view(*shape).sum(dim=(1, 3, 5)) > 0  #  ((scale / 3) ** 3)  # > 0
     return vo_scaled.to(torch.int32)
 
 
@@ -51,13 +51,22 @@ def visualize_volume_occupancy(vo, scale=1):
     scene.add_geometry(trimesh.creation.axis(axis_radius=2, axis_length=min(vo_scaled.shape[0], 10)))
     scene.show()
 
+def visualize_voxels_by_pyvista(voxels, use_atomize=False):
+    if use_atomize:
+        object_voxels_atomized = atomize(object_voxels, scale=0.5)
+        object_voxels_atomized.plot()
+        return
+
+    plotter = pv.Plotter()
+    plotter.add_mesh(voxels, color="red", point_size=1, render_points_as_spheres=True)
+    plotter.show()
 
 VOLUME_RADIUS = 384  # Distance from origin to each face of the volume.
 VOLUME_SCALE = 12  # Scale factor for the volume occupancy grid.
 ROOT = "/Users/uveyisakbas/Desktop/blender"
 DATASET_PATH = os.path.join(ROOT, "dataset")
 OUT_TXT_PATH = os.path.join(ROOT, "out_postprocessing.txt")
-VISUALIZE = False
+VISUALIZE = True
 
 # Reset output text file.
 with open(OUT_TXT_PATH, "w") as f:
@@ -67,7 +76,10 @@ with open(OUT_TXT_PATH, "w") as f:
 # Origin for volume occupancy coordinate system is at the top-left-front of the volume.
 # Y goes down, x goes right, z goes back.
 # This transformation matrix helps to get voxels point coordinates in the volume occupancy coordinate system.
-transformation_matrix = create_transformation_matrix(get_rot_mat_x(270), torch.tensor([-VOLUME_RADIUS, -VOLUME_RADIUS, VOLUME_RADIUS], dtype=torch.float32))
+transformation_matrix = create_transformation_matrix(
+    get_rot_mat_x(270),
+    torch.tensor([-VOLUME_RADIUS, -VOLUME_RADIUS, VOLUME_RADIUS], dtype=torch.float32)
+)
 
 for directory in sorted(os.listdir(DATASET_PATH)):
     if directory.startswith("."):  # Skip hidden files.
@@ -78,7 +90,9 @@ for directory in sorted(os.listdir(DATASET_PATH)):
     scene_dir = os.path.join(DATASET_PATH, directory)
 
     # Voxelize and get the voxel points.
-    object_voxels = pv.voxelize(pv.read(os.path.join(scene_dir, "scene.obj")), density=2, check_surface=False)
+    # TODO figure out the relation between density and VOLUME_SCALE. Dynamically adjust.
+    object_mesh = pv.read(os.path.join(scene_dir, "scene.obj"))
+    object_voxels = pv.voxelize(object_mesh, density=2, check_surface=False)
     object_points = torch.as_tensor(object_voxels.points, dtype=torch.float32)
 
     # Transform voxel points to volume occupancy indexes.
