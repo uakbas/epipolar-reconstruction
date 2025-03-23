@@ -87,12 +87,12 @@ def get_voxel_points_by_pyvista(path):
 
 
 def get_voxel_points(path):
-    # mesh = o3d.io.read_triangle_mesh(path)
     mesh = o3d.t.io.read_triangle_mesh(path)
     mesh.compute_vertex_normals()
 
     bbox = mesh.get_axis_aligned_bounding_box()
-    min_bound, max_bound = bbox.min_bound.numpy(), bbox.max_bound.numpy()
+
+    min_bound, max_bound = np.floor(bbox.min_bound.numpy()), np.ceil(bbox.max_bound.numpy())
 
     density = 1
     x_vals = np.arange(min_bound[0], max_bound[0], density)
@@ -101,32 +101,20 @@ def get_voxel_points(path):
 
     print(f"X: {len(x_vals)}, Y: {len(y_vals)}, Z: {len(z_vals)}")
 
+    # TODO make sure the meshgrid is correct
     grid_points = np.array(np.meshgrid(x_vals, y_vals, z_vals)).T.reshape(-1, 3)
 
     scene = o3d.t.geometry.RaycastingScene()
     scene.add_triangles(mesh)
-    # scene.add_triangles(o3d.t.geometry.TriangleMesh.from_legacy(mesh))
-    # print(type(mesh), type(o3d.t.geometry.TriangleMesh.from_legacy(mesh)))
 
-    rays = np.zeros((grid_points.shape[0], 6), dtype="float32")
-    rays[:, :3] = grid_points
+    directions = np.array([[0, 0, 1], [0, 1, 0], [1, 0, 0], [0, 0, -1], [0, -1, 0], [-1, 0, 0]])
 
-    directions = [
-        [0, 0, 1],
-        [0, 1, 0],
-        [1, 0, 0],
-        [0, 0, -1],
-        [0, -1, 0],
-        [-1, 0, 0],
-    ]
+    rays = np.zeros((grid_points.shape[0], directions.shape[0], 6), dtype="float32")
+    rays[:, :, :3] = np.expand_dims(grid_points, axis=1)
+    rays[:, :, 3:] = directions
 
-    aaaa = np.zeros((6, grid_points.shape[0]), dtype="float32")
-    for i, direction in enumerate(directions):
-        rays[:, 3:] = np.array(direction)
-        hits = scene.cast_rays(o3d.core.Tensor(rays))
-        aaaa[i] = hits['t_hit'].numpy() != np.inf
-
-    inside_mask = np.all(aaaa, axis=0)
+    hits = scene.cast_rays(o3d.core.Tensor(rays))
+    inside_mask = np.all((hits['t_hit'].numpy() != np.inf), axis=1)
     inside_points = grid_points[inside_mask]
 
     # point_cloud = o3d.geometry.PointCloud()
@@ -134,6 +122,7 @@ def get_voxel_points(path):
     # o3d.visualization.draw_geometries([point_cloud])
 
     return inside_points
+
 
 
 def process():
