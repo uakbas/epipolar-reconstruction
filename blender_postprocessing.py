@@ -9,9 +9,11 @@ import torch
 import trimesh
 import itertools
 import pyvista as pv
-
+import open3d as o3d
+import numpy as np
 from pyvista.demos.logo import atomize
 from camera import get_rot_mat_x, create_transformation_matrix, homogenize
+import time
 
 
 def scale_volume_occupancy(vo, scale=1):
@@ -56,7 +58,9 @@ def visualize_volume_occupancy(vo, scale=1):
     scene.show()
 
 
-def visualize_voxels_by_pyvista(voxels, use_atomize=False):
+def visualize_by_pyvista(path, use_atomize=False):
+    voxels = pv.voxelize(pv.read(path), density=2, check_surface=False)
+
     if use_atomize:
         object_voxels_atomized = atomize(voxels, scale=0.5)
         object_voxels_atomized.plot()
@@ -65,6 +69,71 @@ def visualize_voxels_by_pyvista(voxels, use_atomize=False):
     plotter = pv.Plotter()
     plotter.add_mesh(voxels, color="red", point_size=1, render_points_as_spheres=True)
     plotter.show()
+
+
+def visualize_points_as_voxels(points):
+    point_cloud = o3d.geometry.PointCloud()
+    point_cloud.points = o3d.utility.Vector3dVector(points)
+    voxel_grid = o3d.geometry.VoxelGrid.create_from_point_cloud(point_cloud, voxel_size=1)
+    o3d.visualization.draw_geometries([voxel_grid])
+
+
+def get_voxel_points_by_pyvista(path):
+    """Load object, voxelize and return the voxel points by pyvista."""
+    object_mesh = pv.read(path)
+    object_voxels = pv.voxelize(object_mesh, density=2, check_surface=False)
+    object_points = torch.as_tensor(object_voxels.points, dtype=torch.float32)
+    return object_points
+
+
+def get_voxel_points(path):
+    # mesh = o3d.io.read_triangle_mesh(path)
+    mesh = o3d.t.io.read_triangle_mesh(path)
+    mesh.compute_vertex_normals()
+
+    bbox = mesh.get_axis_aligned_bounding_box()
+    min_bound, max_bound = bbox.min_bound.numpy(), bbox.max_bound.numpy()
+
+    density = 1
+    x_vals = np.arange(min_bound[0], max_bound[0], density)
+    y_vals = np.arange(min_bound[1], max_bound[1], density)
+    z_vals = np.arange(min_bound[2], max_bound[2], density)
+
+    print(f"X: {len(x_vals)}, Y: {len(y_vals)}, Z: {len(z_vals)}")
+
+    grid_points = np.array(np.meshgrid(x_vals, y_vals, z_vals)).T.reshape(-1, 3)
+
+    scene = o3d.t.geometry.RaycastingScene()
+    scene.add_triangles(mesh)
+    # scene.add_triangles(o3d.t.geometry.TriangleMesh.from_legacy(mesh))
+    # print(type(mesh), type(o3d.t.geometry.TriangleMesh.from_legacy(mesh)))
+
+    rays = np.zeros((grid_points.shape[0], 6), dtype="float32")
+    rays[:, :3] = grid_points
+
+    directions = [
+        [0, 0, 1],
+        [0, 1, 0],
+        [1, 0, 0],
+        [0, 0, -1],
+        [0, -1, 0],
+        [-1, 0, 0],
+    ]
+
+    aaaa = np.zeros((6, grid_points.shape[0]), dtype="float32")
+    for i, direction in enumerate(directions):
+        rays[:, 3:] = np.array(direction)
+        hits = scene.cast_rays(o3d.core.Tensor(rays))
+        aaaa[i] = hits['t_hit'].numpy() != np.inf
+
+    inside_mask = np.all(aaaa, axis=0)
+    inside_points = grid_points[inside_mask]
+
+    # point_cloud = o3d.geometry.PointCloud()
+    # point_cloud.points = o3d.utility.Vector3dVector(inside_points)
+    # o3d.visualization.draw_geometries([point_cloud])
+
+    return inside_points
 
 
 def process():
@@ -86,22 +155,20 @@ def process():
     )
 
     for directory in sorted([directory for directory in os.listdir(dataset_dir_path) if not directory.startswith(".")]):
+        print(f"Processing scene: {directory}")
 
         scene_dir = os.path.join(dataset_dir_path, directory)
-
         object_path = os.path.join(scene_dir, "scene.obj")
 
-        """
-            Load object, voxelize and return the voxel points.
-            TODO figure out the relation between density and volume_scale, adjust dynamically.
-        """
-        object_mesh = pv.read(object_path)
-        object_voxels = pv.voxelize(object_mesh, density=2, check_surface=False)
-        object_points = torch.as_tensor(object_voxels.points, dtype=torch.float32)
+        time_start_voxelize = time.time()
+        object_points = get_voxel_points(object_path)
+        print(f"Voxelize time: {time.time() - time_start_voxelize}")
 
-        visualize_voxels_by_pyvista(object_voxels)
-
+        # Convert object points to voxel indexes.
+        time_start_indexing = time.time()
+        object_points = torch.as_tensor(object_points, dtype=torch.float32)
         occupied_voxel_indexes = torch.round((trans_mat @ homogenize(object_points.T)).T).to(dtype=torch.int)
+        print(f"Indexing time: {time.time() - time_start_indexing}")
 
         # Check if the voxel points are within the volume occupancy grid.
         if not torch.all(torch.logical_and(0 <= occupied_voxel_indexes, occupied_voxel_indexes < volume_radius * 2)):
@@ -109,12 +176,16 @@ def process():
             continue
 
         # Create a volume occupancy and fill the occupied voxels.
+        time_start_fill_occupancy = time.time()
         volume_occupancy = torch.zeros((volume_radius * 2, volume_radius * 2, volume_radius * 2))
         volume_occupancy[occupied_voxel_indexes[:, 1], occupied_voxel_indexes[:, 0], occupied_voxel_indexes[:, 2]] = 1
+        print(f"Fill occupancy time: {time.time() - time_start_fill_occupancy}")
 
         # Scale and save.
+        time_start_scaling = time.time()
         volume_occupancy = scale_volume_occupancy(volume_occupancy, scale=volume_scale)
         torch.save(volume_occupancy, os.path.join(scene_dir, "voxel_grid.pt"))
+        print(f"Scaling time: {time.time() - time_start_scaling}")
 
         if visualize:
             visualize_volume_occupancy(volume_occupancy)
