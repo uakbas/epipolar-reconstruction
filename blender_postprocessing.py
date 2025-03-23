@@ -94,15 +94,16 @@ def get_voxel_points(path):
 
     min_bound, max_bound = np.floor(bbox.min_bound.numpy()), np.ceil(bbox.max_bound.numpy())
 
-    density = 1
+    density = 2
     x_vals = np.arange(min_bound[0], max_bound[0], density)
     y_vals = np.arange(min_bound[1], max_bound[1], density)
     z_vals = np.arange(min_bound[2], max_bound[2], density)
 
     print(f"X: {len(x_vals)}, Y: {len(y_vals)}, Z: {len(z_vals)}")
 
-    # TODO make sure the meshgrid is correct
-    grid_points = np.array(np.meshgrid(x_vals, y_vals, z_vals)).T.reshape(-1, 3)
+    # Indexing could be 'ij'. The result will not be affected since the points created are the same.
+    xv, yv, zv = np.meshgrid(x_vals, y_vals, z_vals, indexing='xy')
+    grid_points = np.stack([xv, yv, zv], axis=-1).reshape(-1, 3)
 
     scene = o3d.t.geometry.RaycastingScene()
     scene.add_triangles(mesh)
