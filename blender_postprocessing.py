@@ -93,13 +93,14 @@ def get_voxel_points(path):
     bbox = mesh.get_axis_aligned_bounding_box()
 
     min_bound, max_bound = np.floor(bbox.min_bound.numpy()), np.ceil(bbox.max_bound.numpy())
+    # print(f"Min bound: {min_bound}, Max bound: {max_bound}")
 
     density = 2
     x_vals = np.arange(min_bound[0], max_bound[0], density)
     y_vals = np.arange(min_bound[1], max_bound[1], density)
     z_vals = np.arange(min_bound[2], max_bound[2], density)
 
-    print(f"X: {len(x_vals)}, Y: {len(y_vals)}, Z: {len(z_vals)}")
+    # print(f"X: {len(x_vals)}, Y: {len(y_vals)}, Z: {len(z_vals)}")
 
     # Indexing could be 'ij'. The result will not be affected since the points created are the same.
     xv, yv, zv = np.meshgrid(x_vals, y_vals, z_vals, indexing='xy')
@@ -131,7 +132,7 @@ def process():
     volume_scale = 12  # Scale factor for the volume occupancy grid.
     root = "/Users/uveyisakbas/Desktop/blender"
     dataset_dir_path = os.path.join(root, "dataset")
-    visualize = True
+    visualize = False
 
     """
         Transformation matrix to convert from Blender coordinates to volume occupancy coordinates.
@@ -152,13 +153,13 @@ def process():
 
         time_start_voxelize = time.time()
         object_points = get_voxel_points(object_path)
-        print(f"Voxelize time: {time.time() - time_start_voxelize}")
+        # print(f"Voxelize time: {time.time() - time_start_voxelize}")
 
         # Convert object points to voxel indexes.
         time_start_indexing = time.time()
         object_points = torch.as_tensor(object_points, dtype=torch.float32)
         occupied_voxel_indexes = torch.round((trans_mat @ homogenize(object_points.T)).T).to(dtype=torch.int)
-        print(f"Indexing time: {time.time() - time_start_indexing}")
+        # print(f"Indexing time: {time.time() - time_start_indexing}")
 
         # Check if the voxel points are within the volume occupancy grid.
         if not torch.all(torch.logical_and(0 <= occupied_voxel_indexes, occupied_voxel_indexes < volume_radius * 2)):
@@ -169,13 +170,13 @@ def process():
         time_start_fill_occupancy = time.time()
         volume_occupancy = torch.zeros((volume_radius * 2, volume_radius * 2, volume_radius * 2))
         volume_occupancy[occupied_voxel_indexes[:, 1], occupied_voxel_indexes[:, 0], occupied_voxel_indexes[:, 2]] = 1
-        print(f"Fill occupancy time: {time.time() - time_start_fill_occupancy}")
+        # print(f"Fill occupancy time: {time.time() - time_start_fill_occupancy}")
 
         # Scale and save.
         time_start_scaling = time.time()
         volume_occupancy = scale_volume_occupancy(volume_occupancy, scale=volume_scale)
         torch.save(volume_occupancy, os.path.join(scene_dir, "voxel_grid.pt"))
-        print(f"Scaling time: {time.time() - time_start_scaling}")
+        # print(f"Scaling time: {time.time() - time_start_scaling}")
 
         if visualize:
             visualize_volume_occupancy(volume_occupancy)
