@@ -11,6 +11,7 @@ import itertools
 import pyvista as pv
 import open3d as o3d
 import numpy as np
+from pyglet.media.drivers import driver_name
 from pyvista.demos.logo import atomize
 from camera import get_rot_mat_x, create_transformation_matrix, homogenize
 import time
@@ -55,7 +56,7 @@ def visualize_volume_occupancy(vo, scale=1):
     scene = trimesh.Scene()
     scene.add_geometry(vg.as_boxes())
     scene.add_geometry(trimesh.creation.axis(axis_radius=2, axis_length=min(vo_scaled.shape[0], 10)))
-    scene.show()
+    scene.show(resolution=(1000, 1000))
 
 
 def visualize_by_pyvista(path, use_atomize=False):
@@ -180,6 +181,18 @@ def process():
 
         if visualize:
             visualize_volume_occupancy(volume_occupancy)
+
+
+def test():
+    dataset_dir_path = "/Users/uveyisakbas/Desktop/blender/dataset"
+    volume_occupancy_paths = sorted(
+        [
+            os.path.join(dataset_dir_path, dir_name, 'voxel_grid.pt') for dir_name in os.listdir(dataset_dir_path)
+            if os.path.isdir(os.path.join(dataset_dir_path, dir_name)) and not dir_name.startswith('.')
+        ]
+    )
+    volume_occupancy = torch.load(volume_occupancy_paths[8])
+    visualize_volume_occupancy(volume_occupancy)
 
 
 if __name__ == "__main__":
