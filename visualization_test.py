@@ -2,7 +2,10 @@ import torch
 import trimesh
 import cv2 as cv
 import numpy as np
-from camera import Camera, homogenize_vec
+import json
+import os
+
+from camera import Camera, homogenize_vec, Sensor
 from epipolar_geometry import draw_epipolar_line
 from visualization_tools import Colors, points_3d_to_trimesh
 from trimesh.points import PointCloud
@@ -10,14 +13,31 @@ from depth_prediction import predict_depth
 from scene import Scene
 
 
-def draw_epipolar_geometry_between(cam_position_1, cam_position_2):
-    scene_ = Scene(scene_dir='scenes/scene_1')
-    cameras, images = scene_.cameras, scene_.images
+def load_blender_dataset(model_dir, cam_position):
 
-    cam1: Camera = cameras[cam_position_1]
-    cam2: Camera = cameras[cam_position_2]
-    img1, img2 = images[cam_position_1], images[cam_position_2]
+    meta_path = os.path.join(model_dir, 'meta.json')
+    image_dir = os.path.join(model_dir, 'image')
 
+    with open(meta_path) as meta:
+        meta = json.load(meta)
+
+    cam_meta = meta['cameras'][cam_position]
+    R = torch.tensor(cam_meta['rotation'], dtype=torch.float32)
+    t = torch.tensor(cam_meta['translation'])
+    sensor = cam_meta['sensor']
+    sensor = Sensor(focal_length=sensor['focal'], size=tuple(sensor['size']), resolution=tuple(sensor['resolution']))
+    cam = Camera(R, t, sensor)
+
+    # load image
+    image_path = os.path.join(image_dir, f'{cam_position}.png')
+    image = cv.imread(image_path)
+    if image is None:
+        raise Exception(f'Could not read image {image_path}')
+
+    return cam, image
+
+
+def draw_epipolar_geometry_between(cam1, cam2, img1, img2):
     F = cam1.fundamental_matrix_between(cam2)
 
     def draw_epipolar_geometry(point, color):
@@ -30,15 +50,35 @@ def draw_epipolar_geometry_between(cam_position_1, cam_position_2):
     return draw_epipolar_geometry
 
 
+def test_epipolar_geometry_blender():
+    model_dir = "/Users/uveyisakbas/Desktop/blender/dataset/0001"
+
+    position_1, position_2 = 'front', 'top'
+    cam1, img1 = load_blender_dataset(model_dir, position_1)
+    cam2, img2 = load_blender_dataset(model_dir, position_2)
+
+    draw = draw_epipolar_geometry_between(cam1, cam2, img1, img2)
+    draw([200, 75], Colors.RED.value)
+
+    cv.imshow(position_1, img1)
+    cv.imshow(position_2, img2)
+    cv.waitKey(0)
+    cv.destroyAllWindows()
+
+
 def test_epipolar_lines():
     """ Test finding epipolar lines given the points on the reference image. """
+    # TODO did not try to run the code after modification, double check.
+
     scene_ = Scene(scene_dir='scenes/scene_1')
-    cameras = scene_.cameras
+    cameras, images = scene_.cameras, scene_.images
 
-    cam = cameras['front']
-    img_w, img_h = cam.sensor_resolution
+    cam1, cam2 = cameras['front'], cameras['top']
+    img1, img2 = images['front'], images['top']
 
-    draw = draw_epipolar_geometry_between('front', 'top')
+    img_w, img_h = cam1.sensor_resolution
+
+    draw = draw_epipolar_geometry_between(cam1, cam2, img1, img2)
 
     # Front Body
     draw([img_w / 2 + 100, img_h / 2 - 200], Colors.RED.value)
@@ -295,8 +335,9 @@ def test_point_cloud_and_trimesh():
 
 
 # test_epipolar_lines()
-test_image_point_to_image_point()
+# test_image_point_to_image_point()
 # test_depth_from_two_points()
-test_depth_to_line_segments()
+# test_depth_to_line_segments()
 # test_transforming_relative_depth()
 # test_point_cloud_and_trimesh()
+test_epipolar_geometry_blender()
