@@ -5,7 +5,7 @@ import numpy as np
 import json
 import os
 
-from camera import Camera, homogenize_vec, Sensor
+from camera import Camera, homogenize_vec, Sensor, get_rot_mat_x
 from epipolar_geometry import draw_epipolar_line
 from visualization_tools import Colors, points_3d_to_trimesh
 from trimesh.points import PointCloud
@@ -17,16 +17,24 @@ def load_blender_dataset(model_dir, cam_position):
 
     meta_path = os.path.join(model_dir, 'meta.json')
     image_dir = os.path.join(model_dir, 'image')
+    depth_dir = os.path.join(model_dir, 'depth')
 
     with open(meta_path) as meta:
         meta = json.load(meta)
 
+    # Blender camera: X: right, Y: up, -Z: forward | OpenCV camera: X: right, Y: down, Z: forward
+    # Convertion is needed from Blender to OpenCV.
+    # R, t from blender
+    # World Coordinate --> R1, t --> Camera Coordinate (Blender) --> R2 --> Camera Coordinate (OpenCV)
+    # R^-1 @ (Xw - t) = Xc | R1^-1 @ R2^-1 @ (Xw -t) = Xc
+    # R^-1 = R1^-1 @ R2^-1 ==> R = R2 @ R1 thus, R_conv @ R is new rotation matrix.
+    R_conv = get_rot_mat_x(180)
     cam_meta = meta['cameras'][cam_position]
     R = torch.tensor(cam_meta['rotation'], dtype=torch.float32)
     t = torch.tensor(cam_meta['translation'])
     sensor = cam_meta['sensor']
     sensor = Sensor(focal_length=sensor['focal'], size=tuple(sensor['size']), resolution=tuple(sensor['resolution']))
-    cam = Camera(R, t, sensor)
+    cam = Camera(R_conv @ R, t, sensor)
 
     # load image
     image_path = os.path.join(image_dir, f'{cam_position}.png')
@@ -34,7 +42,18 @@ def load_blender_dataset(model_dir, cam_position):
     if image is None:
         raise Exception(f'Could not read image {image_path}')
 
-    return cam, image
+    # load depth map
+    depth_min = meta['cameras'][cam_position]['depth']['min']
+    depth_max = meta['cameras'][cam_position]['depth']['max']
+    depth_path = os.path.join(depth_dir, f'{cam_position}.png')
+    depth = cv.imread(depth_path, cv.IMREAD_GRAYSCALE)
+    if depth is None:
+        raise Exception(f'Could not read depth {depth_path}')
+
+    depth = depth / 255
+    depth = depth * (depth_max - depth_min) + depth_min
+
+    return cam, image, depth
 
 
 def draw_epipolar_geometry_between(cam1, cam2, img1, img2):
@@ -54,16 +73,42 @@ def test_epipolar_geometry_blender():
     model_dir = "/Users/uveyisakbas/Desktop/blender/dataset/0001"
 
     position_1, position_2 = 'front', 'top'
-    cam1, img1 = load_blender_dataset(model_dir, position_1)
-    cam2, img2 = load_blender_dataset(model_dir, position_2)
+    cam1, img1, _ = load_blender_dataset(model_dir, position_1)
+    cam2, img2, _ = load_blender_dataset(model_dir, position_2)
 
     draw = draw_epipolar_geometry_between(cam1, cam2, img1, img2)
-    draw([200, 75], Colors.RED.value)
+    draw([280, 230], Colors.RED.value)
 
     cv.imshow(position_1, img1)
     cv.imshow(position_2, img2)
     cv.waitKey(0)
     cv.destroyAllWindows()
+
+
+def test_depth_maps_blender():
+    model_dir = "/Users/uveyisakbas/Desktop/blender/dataset/0000"
+
+    cam1, img1, depth1 = load_blender_dataset(model_dir, 'front')
+    is_valid = torch.tensor(depth1, dtype=torch.float32).flatten() < 820
+    points1 = cam1.transform_to_world(cam1.create_point_cloud_by_depth_map(depth1)[is_valid])
+
+    cam2, img2, depth2 = load_blender_dataset(model_dir, 'back')
+    is_valid = torch.tensor(depth2, dtype=torch.float32).flatten() < 820
+    points2 = cam2.transform_to_world(cam2.create_point_cloud_by_depth_map(depth2)[is_valid])
+
+    cam3, img3, depth3 = load_blender_dataset(model_dir, 'top')
+    is_valid = torch.tensor(depth3, dtype=torch.float32).flatten() < 820
+    points3 = cam3.transform_to_world(cam3.create_point_cloud_by_depth_map(depth3)[is_valid])
+
+    cam4, img4, depth4 = load_blender_dataset(model_dir, 'bottom')
+    is_valid = torch.tensor(depth4, dtype=torch.float32).flatten() < 820
+    points4 = cam4.transform_to_world(cam4.create_point_cloud_by_depth_map(depth4)[is_valid])
+
+    points = torch.cat((points1, points2, points3, points4), dim=0) / 100
+    cloud = trimesh.PointCloud(points)
+    trimesh.Scene(cloud).show()
+
+    print('done')
 
 
 def test_epipolar_lines():
@@ -340,4 +385,5 @@ def test_point_cloud_and_trimesh():
 # test_depth_to_line_segments()
 # test_transforming_relative_depth()
 # test_point_cloud_and_trimesh()
-test_epipolar_geometry_blender()
+# test_epipolar_geometry_blender()
+test_depth_maps_blender()
