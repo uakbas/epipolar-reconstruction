@@ -13,7 +13,7 @@ from depth_prediction import predict_depth
 from scene import Scene
 
 
-def load_blender_dataset(model_dir, cam_position):
+def load_blender_dataset(model_dir, cam_position, normalize=False):
 
     meta_path = os.path.join(model_dir, 'meta.json')
     image_dir = os.path.join(model_dir, 'image')
@@ -22,6 +22,19 @@ def load_blender_dataset(model_dir, cam_position):
     with open(meta_path) as meta:
         meta = json.load(meta)
 
+    # The radius of the sphere in which the object is located.
+    volume_radius = meta['volume_radius']
+    scale_factor = 1.0 / volume_radius if normalize else 1.0
+
+    # load camera
+    cam_meta = meta['cameras'][cam_position]
+    R = torch.tensor(cam_meta['rotation'], dtype=torch.float32)
+    t = torch.tensor(cam_meta['translation'], dtype=torch.float32)
+    t = t * scale_factor  # apply normalization
+
+    sensor = cam_meta['sensor']
+    sensor = Sensor(focal_length=sensor['focal'], size=tuple(sensor['size']), resolution=tuple(sensor['resolution']))
+
     # Blender camera: X: right, Y: up, -Z: forward | OpenCV camera: X: right, Y: down, Z: forward
     # Convertion is needed from Blender to OpenCV.
     # R, t from blender
@@ -29,11 +42,6 @@ def load_blender_dataset(model_dir, cam_position):
     # R^-1 @ (Xw - t) = Xc | R1^-1 @ R2^-1 @ (Xw -t) = Xc
     # R^-1 = R1^-1 @ R2^-1 ==> R = R2 @ R1 thus, R_conv @ R is new rotation matrix.
     R_conv = get_rot_mat_x(180)
-    cam_meta = meta['cameras'][cam_position]
-    R = torch.tensor(cam_meta['rotation'], dtype=torch.float32)
-    t = torch.tensor(cam_meta['translation'])
-    sensor = cam_meta['sensor']
-    sensor = Sensor(focal_length=sensor['focal'], size=tuple(sensor['size']), resolution=tuple(sensor['resolution']))
     cam = Camera(R_conv @ R, t, sensor)
 
     # load image
@@ -52,6 +60,7 @@ def load_blender_dataset(model_dir, cam_position):
 
     depth = depth / 255
     depth = depth * (depth_max - depth_min) + depth_min
+    depth = depth * scale_factor  # apply normalization
 
     return cam, image, depth
 
@@ -86,25 +95,29 @@ def test_epipolar_geometry_blender():
 
 
 def test_depth_maps_blender():
-    model_dir = "/Users/uveyisakbas/Desktop/blender/dataset/0000"
+    model_dir = "/Users/uveyisakbas/Desktop/blender/dataset/0001"
 
-    cam1, img1, depth1 = load_blender_dataset(model_dir, 'front')
-    is_valid = torch.tensor(depth1, dtype=torch.float32).flatten() < 820
+    normalize = True
+    depth_th = 1.7 if normalize else 800
+
+    cam1, img1, depth1 = load_blender_dataset(model_dir, 'front', normalize=normalize)
+    is_valid = torch.tensor(depth1, dtype=torch.float32).flatten() < depth_th
     points1 = cam1.transform_to_world(cam1.create_point_cloud_by_depth_map(depth1)[is_valid])
 
-    cam2, img2, depth2 = load_blender_dataset(model_dir, 'back')
-    is_valid = torch.tensor(depth2, dtype=torch.float32).flatten() < 820
+    cam2, img2, depth2 = load_blender_dataset(model_dir, 'back', normalize=normalize)
+    is_valid = torch.tensor(depth2, dtype=torch.float32).flatten() < depth_th
     points2 = cam2.transform_to_world(cam2.create_point_cloud_by_depth_map(depth2)[is_valid])
 
-    cam3, img3, depth3 = load_blender_dataset(model_dir, 'top')
-    is_valid = torch.tensor(depth3, dtype=torch.float32).flatten() < 820
+    cam3, img3, depth3 = load_blender_dataset(model_dir, 'top', normalize=normalize)
+    is_valid = torch.tensor(depth3, dtype=torch.float32).flatten() < depth_th
     points3 = cam3.transform_to_world(cam3.create_point_cloud_by_depth_map(depth3)[is_valid])
 
-    cam4, img4, depth4 = load_blender_dataset(model_dir, 'bottom')
-    is_valid = torch.tensor(depth4, dtype=torch.float32).flatten() < 820
+    cam4, img4, depth4 = load_blender_dataset(model_dir, 'bottom',normalize=normalize)
+    is_valid = torch.tensor(depth4, dtype=torch.float32).flatten() < depth_th
     points4 = cam4.transform_to_world(cam4.create_point_cloud_by_depth_map(depth4)[is_valid])
 
-    points = torch.cat((points1, points2, points3, points4), dim=0) / 100
+    points = torch.cat((points1, points2, points3, points4), dim=0)
+
     cloud = trimesh.PointCloud(points)
     trimesh.Scene(cloud).show()
 
