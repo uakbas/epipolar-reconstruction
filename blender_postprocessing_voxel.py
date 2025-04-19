@@ -1,5 +1,6 @@
 """
 This script is used to postprocess the blender output.
+Apply postprocessing to exported object to create volume occupancy grid.
 (not important in here) Blender camera coordinate system convention: (x: right, y:up, -z:forward)
 Blender world coordinate system convention (when we stay at the front camera location):
     x: right | y: forward --> moving away from us | z: up --> looking up to the sky
