@@ -24,11 +24,29 @@ The web-based viewer features:
 ### 📦 Download Point Clouds
 
 Original PLY files:
-- [Scene 1](point_clouds/scene_1.ply)
-- [Scene 2](point_clouds/scene_2.ply)
-- [Scene 3](point_clouds/scene_3.ply)
-- [Scene 4](point_clouds/scene_4.ply)
-- [Scene 5](point_clouds/scene_5.ply)### Local Viewing Options
+- [Scene 1](docs/point_clouds/scene_1.ply)
+- [Scene 2](docs/point_clouds/scene_2.ply)
+- [Scene 3](docs/point_clouds/scene_3.ply)
+- [Scene 4](docs/point_clouds/scene_4.ply)
+- [Scene 5](docs/point_clouds/scene_5.ply)
+
+### 📚 Theoretical Resources
+
+PDF documents covering the theoretical foundations:
+- [Epipolar Geometry](theory_resources/03-epipolar-geometry.pdf)
+- [12.1 Epipolar Geometry](theory_resources/12.1_Epipolar_Geometry.pdf)
+- [12.2 Essential Matrix](theory_resources/12.2_Essential_Matrix.pdf)
+- [12.3 Fundamental Matrix](theory_resources/12.3_Fundamental_Matrix.pdf)
+- [12.4 8-Point Algorithm](theory_resources/12.4_8Point_Algorithm.pdf)
+- [13.1 Stereo Rectification](theory_resources/13.1_Stereo_Rectification.pdf)
+- [14.4 Alignment Lucas-Kanade](theory_resources/14.4_Alignment__LucasKanade.pdf)
+- [14.5 Alignment Baker-Matthews](theory_resources/14.5_Alignment__BakerMatthews.pdf)
+- [15.1 Tracking KLT](theory_resources/15.1_Tracking__KLT.pdf)
+- [15 RANSAC Notes](theory_resources/15-RANSAC-notes.pdf)
+- [370 RANSAC](theory_resources/370_10_RANSAC.pptx.pdf)
+- [Feature Matching](theory_resources/lecture_4_2_feature_matching.pdf)
+- [8-Point Algorithm (Original Paper)](theory_resources/8%20point%20algorithm%20-%20original%20paper.pdf)
+- [Structure-from-Motion Revisited](theory_resources/Schonberger_Structure-From-Motion_Revisited_CVPR_2016_paper.pdf)### Local Viewing Options
 
 You can also download the PLY files and view them locally using:
 - [MeshLab](https://www.meshlab.net/) - Feature-rich 3D mesh viewer and editor
@@ -42,7 +60,7 @@ You can also download the PLY files and view them locally using:
 1. Enable GitHub Pages in your repository settings:
    - Go to: Settings → Pages
    - Source: Deploy from a branch
-   - Branch: `main`, Folder: `/documents`
+   - Branch: `main`, Folder: `/docs` ← **Use /docs (GitHub Pages requirement)**
    - Click Save
 2. Wait a few minutes for deployment
 3. Visit: `https://uakbas.github.io/epipolar-reconstruction/`
@@ -50,8 +68,8 @@ You can also download the PLY files and view them locally using:
 ### Run Viewer Locally
 
 1. Clone this repository
-2. Open `documents/index.html` in your browser
-3. The viewer will load PLY files from the `point_clouds/` directory
+2. Open `docs/index.html` in your browser
+3. The viewer will load PLY files from the `docs/point_clouds/` directory
 
 ### Requirements (for development)
 
@@ -64,12 +82,16 @@ pip install open3d numpy opencv-python
 ```
 epipolar-reconstruction/
 ├── output/              # Generated output files
-├── point_clouds/        # Point cloud data (PLY files)
-│   ├── scene_1.ply
-│   ├── scene_2.ply
+├── docs/                # GitHub Pages website (viewer + data)
+│   ├── index.html       # Interactive Three.js viewer
+│   └── point_clouds/    # Point cloud data (PLY files)
+│       ├── scene_1.ply
+│       ├── scene_2.ply
+│       └── ...
+├── theory_resources/    # Theoretical papers and documentation (PDFs)
+│   ├── 03-epipolar-geometry.pdf
+│   ├── 12.1_Epipolar_Geometry.pdf
 │   └── ...
-├── documents/           # GitHub Pages website
-│   └── index.html       # Interactive Three.js viewer
 ├── depth/               # Depth estimation module
 ├── scene_objects/       # Scene object data
 └── README.md
