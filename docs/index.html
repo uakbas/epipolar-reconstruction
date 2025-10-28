@@ -119,6 +119,71 @@
             font-size: 12px;
             color: #aaa;
         }
+        
+        #masks {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            max-width: 450px;
+        }
+        
+        #masks h2 {
+            font-size: 16px;
+            margin-bottom: 10px;
+            color: #fff;
+        }
+        
+        .mask-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+        
+        .mask-item {
+            text-align: center;
+        }
+        
+        .mask-item img {
+            width: 100%;
+            height: auto;
+            border-radius: 5px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .mask-item img:hover {
+            border-color: rgba(255, 255, 255, 0.8);
+            transform: scale(1.05);
+        }
+        
+        .mask-item label {
+            display: block;
+            margin-top: 5px;
+            font-size: 11px;
+            color: #aaa;
+            font-weight: normal;
+        }
+        
+        .toggle-masks {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-bottom: 10px;
+            transition: all 0.3s ease;
+        }
+        
+        .toggle-masks:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
     </style>
 </head>
 <body>
@@ -132,11 +197,11 @@
             <div id="scene-selector">
                 <label for="scene-select">Select Scene:</label>
                 <select id="scene-select">
-                    <option value="scene_1.ply">Scene 1</option>
-                    <option value="scene_2.ply">Scene 2</option>
-                    <option value="scene_3.ply">Scene 3</option>
-                    <option value="scene_4.ply">Scene 4</option>
-                    <option value="scene_5.ply">Scene 5</option>
+                    <option value="scene_1">Scene 1</option>
+                    <option value="scene_2">Scene 2</option>
+                    <option value="scene_3">Scene 3</option>
+                    <option value="scene_4">Scene 4</option>
+                    <option value="scene_5">Scene 5</option>
                 </select>
             </div>
             
@@ -150,6 +215,29 @@
             <div class="stats">
                 <div>Points: <span id="point-count">-</span></div>
                 <div>Controls: Left-drag to rotate, Right-drag to pan, Scroll to zoom</div>
+            </div>
+        </div>
+        
+        <div id="masks">
+            <button class="toggle-masks" onclick="toggleMasks()">Hide Masks</button>
+            <h2>Camera Masks</h2>
+            <div class="mask-grid" id="mask-grid">
+                <div class="mask-item">
+                    <img id="mask-front" src="" alt="Front mask">
+                    <label>Front View</label>
+                </div>
+                <div class="mask-item">
+                    <img id="mask-back" src="" alt="Back mask">
+                    <label>Back View</label>
+                </div>
+                <div class="mask-item">
+                    <img id="mask-top" src="" alt="Top mask">
+                    <label>Top View</label>
+                </div>
+                <div class="mask-item">
+                    <img id="mask-bottom" src="" alt="Bottom mask">
+                    <label>Bottom View</label>
+                </div>
             </div>
         </div>
         
@@ -231,11 +319,42 @@
         
         function loadSelectedScene() {
             const select = document.getElementById('scene-select');
-            const filename = select.value;
-            loadPLY(filename);
+            const sceneName = select.value;
+            loadPLY(sceneName);
+            loadMasks(sceneName);
         }
         
-        function loadPLY(filename) {
+        function loadMasks(sceneName) {
+            // Load mask images from scenes/scene_X/masks/
+            const basePath = `scenes/${sceneName}/masks/`;
+            
+            // Load each mask image
+            document.getElementById('mask-front').src = basePath + 'front.png';
+            document.getElementById('mask-back').src = basePath + 'back.png';
+            document.getElementById('mask-top').src = basePath + 'top.png';
+            document.getElementById('mask-bottom').src = basePath + 'bottom.png';
+        }
+        
+        function toggleMasks() {
+            const maskGrid = document.getElementById('mask-grid');
+            const button = document.querySelector('.toggle-masks');
+            const h2 = document.querySelector('#masks h2');
+            
+            if (maskGrid.style.display === 'none') {
+                maskGrid.style.display = 'grid';
+                h2.style.display = 'block';
+                button.textContent = 'Hide Masks';
+            } else {
+                maskGrid.style.display = 'none';
+                h2.style.display = 'none';
+                button.textContent = 'Show Masks';
+            }
+        }
+        
+        // Make toggleMasks available globally
+        window.toggleMasks = toggleMasks;
+        
+        function loadPLY(sceneName) {
             const loading = document.getElementById('loading');
             loading.style.display = 'block';
             
@@ -248,7 +367,7 @@
             
             const loader = new PLYLoader();
             loader.load(
-                'point_clouds/' + filename,
+                `scenes/${sceneName}/scene.ply`,
                 function (geometry) {
                     geometry.computeVertexNormals();
                     
