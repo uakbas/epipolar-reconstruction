@@ -1,7 +1,18 @@
 # Epipolar Reconstruction
 
 A 3D reconstruction system using epipolar geometry and stereo vision to reconstruct fish objects from multi-view orthogonal camera setups.
-Results: https://uakbas.github.io/epipolar-reconstruction/
+
+## 🎨 Interactive 3D Viewer
+
+**[👉 View Live Demo](https://uakbas.github.io/epipolar-reconstruction/)**
+
+<p align="center">
+  <a href="https://uakbas.github.io/epipolar-reconstruction/">
+    <img src="docs/interactive_viewing.png" alt="Interactive 3D Viewer" width="800">
+  </a>
+</p>
+
+*Click the image above to explore the interactive 3D point cloud viewer*
 
 
 ## Overview
@@ -17,11 +28,6 @@ This project implements a complete pipeline for 3D point cloud reconstruction us
 - **Masks Required**: Binary masks are essential for each camera view to isolate the target object from the background
 - **Target Object**: Optimized for fish object reconstruction, though adaptable to other objects
 - **Calibrated Views**: Orthogonal camera positions enable simplified epipolar geometry calculations
-
-
-## 🎨 3D Reconstruction Results [ Interactive 3D Viewer | GitHub Pages ]
-View the reconstructed fish objects as interactive 3D point clouds:
-https://uakbas.github.io/epipolar-reconstruction/
 
 
 ## 📚 Theoretical Resources
