@@ -8,3 +8,4 @@ __pycache__/
 .DS_Store
 /todo.txt
 /scene_objects/
+/scenes_out/

@@ -6,7 +6,7 @@ from scene import Scene
 def show_meshes():
     scene_num = 1
     scene_dir = f'scenes/scene_{scene_num}'
-    configuration = [('front', 'top', 0.7), ('back', 'top', 0.7), ('top', 'front', 0.1), ('bottom', 'back', 0.7)]
+    configuration = [('front', 'top', 0.7), ('back', 'top', 0.7), ('top', 'front', 0.7), ('bottom', 'back', 0.7)]
     scene = Scene(scene_dir=scene_dir, depth_configurations=configuration)
     scene.generate_point_clouds()
     meshes = list(scene.convert_to_meshes().values())
@@ -36,8 +36,8 @@ def show_point_clouds():
 
 def voxel_voting():
     scene_num = 1
-    min_vote_required = 2
-    positions = ['front', 'back']
+    min_vote_required = 3
+    positions = ['front', 'top', 'back', 'bottom']
     scene_dir = f'scenes/scene_{scene_num}'
     scene = Scene(scene_dir=scene_dir)
     cloud, volume_mask = scene.create_voxel_volume(positions=positions, min_vote_required=min_vote_required)
