@@ -1,10 +1,29 @@
 # Epipolar Reconstruction
 
-3D reconstruction project using epipolar geometry and stereo vision.
+A 3D reconstruction system using epipolar geometry and stereo vision to reconstruct fish objects from multi-view orthogonal camera setups.
+
+## Overview
+
+This project implements a complete pipeline for 3D point cloud reconstruction using epipolar geometry principles. The system is specifically designed for fish object reconstruction with the following characteristics:
+
+**Camera Setup:**
+- **Orthogonal Configuration**: Cameras are positioned perpendicular to each other around the target object
+- **Multi-View**: Typically uses 4 cameras (can use fewer), capturing views from different angles (front, back, top, bottom)
+- **Fixed Positions**: Cameras maintain fixed positions to enable accurate geometric reconstruction
+
+**Input Requirements:**
+- **Masks Required**: Binary masks are essential for each camera view to isolate the target object from the background
+- **Target Object**: Optimized for fish object reconstruction, though adaptable to other objects
+- **Calibrated Views**: Orthogonal camera positions enable simplified epipolar geometry calculations
+
+**Output:**
+- High-quality 3D point clouds in PLY format
+- Multi-view masks for each scene
+- Interactive web-based visualization
 
 ## 3D Reconstruction Results
 
-This project generates 3D point clouds from stereo image pairs. View the interactive results below!
+View the reconstructed fish objects as interactive 3D point clouds!
 
 ### 🎨 Interactive 3D Viewer (GitHub Pages)
 
@@ -21,14 +40,18 @@ The web-based viewer features:
 
 > **Note:** PLY files are not directly viewable on the GitHub repository page itself (GitHub doesn't have a built-in PLY viewer). However, the GitHub Pages viewer provides full interactive 3D visualization!
 
-### 📦 Download Point Clouds
+### 📦 Reconstruction Results
 
-Original PLY files:
-- [Scene 1](docs/point_clouds/scene_1.ply)
-- [Scene 2](docs/point_clouds/scene_2.ply)
-- [Scene 3](docs/point_clouds/scene_3.ply)
-- [Scene 4](docs/point_clouds/scene_4.ply)
-- [Scene 5](docs/point_clouds/scene_5.ply)
+Each scene contains:
+- 3D point cloud (PLY format)
+- Camera masks from 4 orthogonal views (front, back, top, bottom)
+
+**Download Complete Scenes:**
+- [Scene 1](results/scene_1/) - [Point Cloud](results/scene_1/scene_1.ply) | Masks: [Front](results/scene_1/front.png), [Back](results/scene_1/back.png), [Top](results/scene_1/top.png), [Bottom](results/scene_1/bottom.png)
+- [Scene 2](results/scene_2/) - [Point Cloud](results/scene_2/scene_2.ply) | Masks: [Front](results/scene_2/front.png), [Back](results/scene_2/back.png), [Top](results/scene_2/top.png), [Bottom](results/scene_2/bottom.png)
+- [Scene 3](results/scene_3/) - [Point Cloud](results/scene_3/scene_3.ply) | Masks: [Front](results/scene_3/front.png), [Back](results/scene_3/back.png), [Top](results/scene_3/top.png), [Bottom](results/scene_3/bottom.png)
+- [Scene 4](results/scene_4/) - [Point Cloud](results/scene_4/scene_4.ply) | Masks: [Front](results/scene_4/front.png), [Back](results/scene_4/back.png), [Top](results/scene_4/top.png), [Bottom](results/scene_4/bottom.png)
+- [Scene 5](results/scene_5/) - [Point Cloud](results/scene_5/scene_5.ply) | Masks: [Front](results/scene_5/front.png), [Back](results/scene_5/back.png), [Top](results/scene_5/top.png), [Bottom](results/scene_5/bottom.png)
 
 ### 📚 Theoretical Resources
 
@@ -46,55 +69,34 @@ PDF documents covering the theoretical foundations:
 - [370 RANSAC](theory_resources/370_10_RANSAC.pptx.pdf)
 - [Feature Matching](theory_resources/lecture_4_2_feature_matching.pdf)
 - [8-Point Algorithm (Original Paper)](theory_resources/8%20point%20algorithm%20-%20original%20paper.pdf)
-- [Structure-from-Motion Revisited](theory_resources/Schonberger_Structure-From-Motion_Revisited_CVPR_2016_paper.pdf)### Local Viewing Options
+- [Structure-from-Motion Revisited](theory_resources/Schonberger_Structure-From-Motion_Revisited_CVPR_2016_paper.pdf)
 
-You can also download the PLY files and view them locally using:
+### 🛠️ Local Viewing Options
+
+Download the PLY files and view them locally using:
 - [MeshLab](https://www.meshlab.net/) - Feature-rich 3D mesh viewer and editor
 - [CloudCompare](https://www.cloudcompare.org/) - Point cloud processing software
 - [Blender](https://www.blender.org/) - Professional 3D creation suite
-
-## Setup & Usage
-
-### View Online (Recommended)
-
-1. Enable GitHub Pages in your repository settings:
-   - Go to: Settings → Pages
-   - Source: Deploy from a branch
-   - Branch: `main`, Folder: `/docs` ← **Use /docs (GitHub Pages requirement)**
-   - Click Save
-2. Wait a few minutes for deployment
-3. Visit: `https://uakbas.github.io/epipolar-reconstruction/`
-
-### Run Viewer Locally
-
-1. Clone this repository
-2. Open `docs/index.html` in your browser
-3. The viewer will load PLY files from the `docs/point_clouds/` directory
-
-### Requirements (for development)
-
-```bash
-pip install open3d numpy opencv-python
-```
 
 ## Project Structure
 
 ```
 epipolar-reconstruction/
-├── output/              # Generated output files
-├── docs/                # GitHub Pages website (viewer + data)
-│   ├── index.html       # Interactive Three.js viewer
-│   └── point_clouds/    # Point cloud data (PLY files)
-│       ├── scene_1.ply
-│       ├── scene_2.ply
-│       └── ...
-├── theory_resources/    # Theoretical papers and documentation (PDFs)
-│   ├── 03-epipolar-geometry.pdf
-│   ├── 12.1_Epipolar_Geometry.pdf
+├── results/             # Reconstruction results (PLY + masks per scene)
+│   ├── scene_1/
+│   │   ├── scene_1.ply  # 3D point cloud
+│   │   ├── front.png    # Camera mask (front view)
+│   │   ├── back.png     # Camera mask (back view)
+│   │   ├── top.png      # Camera mask (top view)
+│   │   └── bottom.png   # Camera mask (bottom view)
+│   ├── scene_2/
 │   └── ...
+├── docs/                # GitHub Pages website (interactive viewer)
+│   ├── index.html       # Three.js point cloud viewer
+│   └── point_clouds/    # PLY files for web viewer
+├── theory_resources/    # Theoretical papers and documentation (PDFs)
 ├── depth/               # Depth estimation module
-├── scene_objects/       # Scene object data
-└── README.md
+└── scenes/              # Original scene data with images and masks
 ```
 
 ## Technologies
@@ -102,6 +104,10 @@ epipolar-reconstruction/
 - **Point Cloud Reconstruction**: Epipolar geometry and stereo vision
 - **Web Viewer**: Three.js with PLYLoader
 - **Hosting**: GitHub Pages (free static site hosting)
+
+## License
+
+MIT License
 
 ## License
 
